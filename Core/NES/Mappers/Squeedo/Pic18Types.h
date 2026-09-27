@@ -112,6 +112,10 @@ namespace Pic18Sfr
 	constexpr uint16_t PORTC = 0xF82;
 	constexpr uint16_t PORTB = 0xF81;
 	constexpr uint16_t PORTA = 0xF80;
+
+	// Threshold: addresses >= SfrBase must go through ReadSfr/WriteSfr;
+	// everything below is GPR and can be accessed as a plain Data[] read/write.
+	constexpr uint16_t SfrBase = 0xF80;
 }
 
 // STATUS register bits

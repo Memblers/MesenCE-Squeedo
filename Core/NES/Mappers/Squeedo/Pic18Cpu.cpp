@@ -68,7 +68,8 @@ uint32_t Pic18Cpu::PopStack()
 uint8_t Pic18Cpu::ReadData(uint16_t addr)
 {
 	addr &= 0xFFF;
-	if(_peripherals) {
+	// Fast path: GPR (below SFR region) — direct array access, no virtual dispatch
+	if(addr >= Pic18Sfr::SfrBase && _peripherals) {
 		return _peripherals->ReadSfr(addr);
 	}
 	return _state.Data[addr];
@@ -77,7 +78,8 @@ uint8_t Pic18Cpu::ReadData(uint16_t addr)
 void Pic18Cpu::WriteData(uint16_t addr, uint8_t value)
 {
 	addr &= 0xFFF;
-	if(_peripherals) {
+	// Fast path: GPR (below SFR region) — direct array write, no virtual dispatch
+	if(addr >= Pic18Sfr::SfrBase && _peripherals) {
 		_peripherals->WriteSfr(addr, value);
 	}
 	_state.Data[addr] = value;

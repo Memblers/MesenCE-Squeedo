@@ -44,32 +44,31 @@ void Pic18Peripherals::ClockTimers(int cycles)
 
 		if(useInternalClock) {
 			uint8_t prescaler = GetTimer0PrescalerDiv();
-			for(int i = 0; i < cycles; i++) {
-				_tmr0PrescalerCounter++;
-				if(_tmr0PrescalerCounter >= prescaler) {
-					_tmr0PrescalerCounter = 0;
+			_tmr0PrescalerCounter += cycles;
+			uint16_t ticks = _tmr0PrescalerCounter / prescaler;
+			_tmr0PrescalerCounter %= prescaler;
 
-					uint16_t tmr0;
-					if(is8Bit) {
-						tmr0 = _state.Data[Pic18Sfr::TMR0L & 0xFFF];
-						tmr0++;
-						if(tmr0 > 0xFF) {
-							tmr0 = _state.Data[Pic18Sfr::TMR0H & 0xFFF];  // Reload
-							_state.INTCON |= Pic18IntconBits::TMR0IF;
-							_state.InterruptPending = true;
-						}
-						_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
-					} else {
-						tmr0 = ((uint16_t)_state.Data[Pic18Sfr::TMR0H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR0L & 0xFFF];
-						tmr0++;
-						if(tmr0 > 0xFFFF) {
-							tmr0 = 0;  // Reset (no TMR0H reload in 16-bit mode)
-							_state.INTCON |= Pic18IntconBits::TMR0IF;
-							_state.InterruptPending = true;
-						}
-						_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
-						_state.Data[Pic18Sfr::TMR0H & 0xFFF] = (uint8_t)(tmr0 >> 8);
+			if(ticks > 0) {
+				if(is8Bit) {
+					uint16_t tmr0 = _state.Data[Pic18Sfr::TMR0L & 0xFFF] + ticks;
+					if(tmr0 > 0xFF) {
+						// Overflow: reload from TMR0H, set interrupt
+						tmr0 = _state.Data[Pic18Sfr::TMR0H & 0xFFF] + (tmr0 - 0x100);
+						if(tmr0 > 0xFF) tmr0 &= 0xFF;  // Second overflow (rare)
+						_state.INTCON |= Pic18IntconBits::TMR0IF;
+						_state.InterruptPending = true;
 					}
+					_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
+				} else {
+					uint32_t tmr0 = ((uint32_t)_state.Data[Pic18Sfr::TMR0H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR0L & 0xFFF];
+					tmr0 += ticks;
+					if(tmr0 > 0xFFFF) {
+						tmr0 = 0;  // 16-bit mode resets to 0
+						_state.INTCON |= Pic18IntconBits::TMR0IF;
+						_state.InterruptPending = true;
+					}
+					_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
+					_state.Data[Pic18Sfr::TMR0H & 0xFFF] = (uint8_t)(tmr0 >> 8);
 				}
 			}
 		}
@@ -80,20 +79,20 @@ void Pic18Peripherals::ClockTimers(int cycles)
 		bool useInternalClock = !(t1con & (1 << Pic18T1conBits::TMR1CS));
 		if(useInternalClock) {
 			uint8_t prescaler = GetTimer1PrescalerDiv();
-			for(int i = 0; i < cycles; i++) {
-				_tmr1PrescalerCounter++;
-				if(_tmr1PrescalerCounter >= prescaler) {
-					_tmr1PrescalerCounter = 0;
-					uint16_t tmr1 = ((uint16_t)_state.Data[Pic18Sfr::TMR1H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR1L & 0xFFF];
-					tmr1++;
-					if(tmr1 > 0xFFFF) {
-						tmr1 = 0;
-						_state.Data[Pic18Sfr::PIR1 & 0xFFF] |= Pic18Pir1Bits::TMR1IF;
-						_state.InterruptPending = true;
-					}
-					_state.Data[Pic18Sfr::TMR1L & 0xFFF] = (uint8_t)tmr1;
-					_state.Data[Pic18Sfr::TMR1H & 0xFFF] = (uint8_t)(tmr1 >> 8);
+			_tmr1PrescalerCounter += cycles;
+			uint16_t ticks = _tmr1PrescalerCounter / prescaler;
+			_tmr1PrescalerCounter %= prescaler;
+
+			if(ticks > 0) {
+				uint32_t tmr1 = ((uint32_t)_state.Data[Pic18Sfr::TMR1H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR1L & 0xFFF];
+				tmr1 += ticks;
+				if(tmr1 > 0xFFFF) {
+					tmr1 = 0;
+					_state.Data[Pic18Sfr::PIR1 & 0xFFF] |= Pic18Pir1Bits::TMR1IF;
+					_state.InterruptPending = true;
 				}
+				_state.Data[Pic18Sfr::TMR1L & 0xFFF] = (uint8_t)tmr1;
+				_state.Data[Pic18Sfr::TMR1H & 0xFFF] = (uint8_t)(tmr1 >> 8);
 			}
 		}
 	}
@@ -103,20 +102,20 @@ void Pic18Peripherals::ClockTimers(int cycles)
 		bool useInternalClock = !(t3con & (1 << Pic18T3conBits::TMR3CS));
 		if(useInternalClock) {
 			uint8_t prescaler = GetTimer3PrescalerDiv();
-			for(int i = 0; i < cycles; i++) {
-				_tmr3PrescalerCounter++;
-				if(_tmr3PrescalerCounter >= prescaler) {
-					_tmr3PrescalerCounter = 0;
-					uint16_t tmr3 = ((uint16_t)_state.Data[Pic18Sfr::TMR3H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR3L & 0xFFF];
-					tmr3++;
-					if(tmr3 > 0xFFFF) {
-						tmr3 = 0;
-						_state.Data[Pic18Sfr::PIR2 & 0xFFF] |= Pic18Pir2Bits::TMR3IF;
-						_state.InterruptPending = true;
-					}
-					_state.Data[Pic18Sfr::TMR3L & 0xFFF] = (uint8_t)tmr3;
-					_state.Data[Pic18Sfr::TMR3H & 0xFFF] = (uint8_t)(tmr3 >> 8);
+			_tmr3PrescalerCounter += cycles;
+			uint16_t ticks = _tmr3PrescalerCounter / prescaler;
+			_tmr3PrescalerCounter %= prescaler;
+
+			if(ticks > 0) {
+				uint32_t tmr3 = ((uint32_t)_state.Data[Pic18Sfr::TMR3H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR3L & 0xFFF];
+				tmr3 += ticks;
+				if(tmr3 > 0xFFFF) {
+					tmr3 = 0;
+					_state.Data[Pic18Sfr::PIR2 & 0xFFF] |= Pic18Pir2Bits::TMR3IF;
+					_state.InterruptPending = true;
 				}
+				_state.Data[Pic18Sfr::TMR3L & 0xFFF] = (uint8_t)tmr3;
+				_state.Data[Pic18Sfr::TMR3H & 0xFFF] = (uint8_t)(tmr3 >> 8);
 			}
 		}
 	}
@@ -262,14 +261,17 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 	case Pic18Sfr::PORTA:
 		_state.Data[Pic18Sfr::LATA & 0xFFF] = value;
 		_state.Data[Pic18Sfr::PORTA & 0xFFF] = value;
+		_gpioDirty = true;
 		return;
 	case Pic18Sfr::PORTB:
 		_state.Data[Pic18Sfr::LATB & 0xFFF] = value;
 		_state.Data[Pic18Sfr::PORTB & 0xFFF] = value;
+		_gpioDirty = true;
 		return;
 	case Pic18Sfr::PORTC:
 		_state.Data[Pic18Sfr::LATC & 0xFFF] = value;
 		_state.Data[Pic18Sfr::PORTC & 0xFFF] = value;
+		_gpioDirty = true;
 		return;
 	case Pic18Sfr::PORTD:
 		_state.Data[Pic18Sfr::LATD & 0xFFF] = value;
@@ -282,9 +284,9 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 		_state.Data[Pic18Sfr::PORTE & 0xFFF] = value;
 		return;
 
-	case Pic18Sfr::LATA: _state.Data[Pic18Sfr::LATA & 0xFFF] = value; _state.Data[Pic18Sfr::PORTA & 0xFFF] = value; return;
-	case Pic18Sfr::LATB: _state.Data[Pic18Sfr::LATB & 0xFFF] = value; _state.Data[Pic18Sfr::PORTB & 0xFFF] = value; return;
-	case Pic18Sfr::LATC: _state.Data[Pic18Sfr::LATC & 0xFFF] = value; _state.Data[Pic18Sfr::PORTC & 0xFFF] = value; return;
+	case Pic18Sfr::LATA: _state.Data[Pic18Sfr::LATA & 0xFFF] = value; _state.Data[Pic18Sfr::PORTA & 0xFFF] = value; _gpioDirty = true; return;
+	case Pic18Sfr::LATB: _state.Data[Pic18Sfr::LATB & 0xFFF] = value; _state.Data[Pic18Sfr::PORTB & 0xFFF] = value; _gpioDirty = true; return;
+	case Pic18Sfr::LATC: _state.Data[Pic18Sfr::LATC & 0xFFF] = value; _state.Data[Pic18Sfr::PORTC & 0xFFF] = value; _gpioDirty = true; return;
 	case Pic18Sfr::LATD: _state.Data[Pic18Sfr::LATD & 0xFFF] = value; _state.Data[Pic18Sfr::PORTD & 0xFFF] = value; _state.PspPortDOutput = value; return;
 	case Pic18Sfr::LATE: _state.Data[Pic18Sfr::LATE & 0xFFF] = value; _state.Data[Pic18Sfr::PORTE & 0xFFF] = value; return;
 

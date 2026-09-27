@@ -231,7 +231,9 @@ protected:
 		}
 
 		// Check if PIC GPIO changed → apply banking
-		ApplyGpioBanking();
+		if(_picPeripherals->CheckAndClearGpioDirty()) {
+			ApplyGpioBanking();
+		}
 	}
 
 	// Transparent PSP bridge — the mapper does NOT interpret register meanings.
