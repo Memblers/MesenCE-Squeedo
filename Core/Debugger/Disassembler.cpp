@@ -93,6 +93,7 @@ void Disassembler::ResetPrgCache()
 	InitSource(MemoryType::SmsPrgRom);
 	InitSource(MemoryType::GbaPrgRom);
 	InitSource(MemoryType::WsPrgRom);
+	InitSource(MemoryType::Pic18ProgramRom);
 }
 
 void Disassembler::InvalidateCache(AddressInfo addrInfo, CpuType type)
@@ -330,6 +331,7 @@ void Disassembler::GetLineData(DisassemblyResult& row, CpuType type, MemoryType 
 		case MemoryType::SnesPrgRom:
 		case MemoryType::NesPrgRom:
 		case MemoryType::PcePrgRom:
+		case MemoryType::Pic18ProgramRom:
 			data.Flags |= (uint8_t)LineFlags::PrgRom;
 			break;
 
@@ -604,6 +606,17 @@ void Disassembler::GetLineData(DisassemblyResult& row, CpuType type, MemoryType 
 					if(showMemoryValues && data.EffectiveAddress.ValueSize >= 0) {
 						data.Value = disInfo.GetMemoryValue(data.EffectiveAddress, _memoryDumper, memType);
 					}
+					break;
+				}
+
+				case CpuType::Pic18: {
+					if(!disInfo.IsInitialized()) {
+						disInfo = DisassemblyInfo(row.Address.Address, 0, CpuType::Pic18, row.Address.Type, _memoryDumper);
+					} else {
+						data.Flags |= LineFlags::VerifiedCode;
+					}
+
+					data.OpSize = disInfo.GetOpSize();
 					break;
 				}
 			}

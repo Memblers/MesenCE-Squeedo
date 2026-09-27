@@ -1022,6 +1022,18 @@ namespace Mesen.ViewModels
 					IsVisible = () => MainWindow.RomInfo.CpuTypes.Contains(CpuType.St018),
 					OnClick = () => DebuggerWindow.GetOrOpenWindow(CpuType.St018)
 				},
+				/*new ContextMenuAction() {
+					ActionType = ActionType.OpenPic18Debugger,
+					Shortcut = () => ConfigManager.Config.Debug.Shortcuts.Get(DebuggerShortcut.OpenPic18Debugger),
+					IsVisible = () => MainWindow.RomInfo.CpuTypes.Contains(CpuType.Pic18),
+					OnClick = () => DebuggerWindow.GetOrOpenWindow(CpuType.Pic18)
+				},*/
+				new ContextMenuAction() {
+					ActionType = ActionType.Custom,
+					CustomText = "PIC18 Debugger",
+					IsVisible = () => MainWindow.RomInfo.CpuTypes.Contains(CpuType.Pic18),
+					OnClick = () => DebuggerWindow.GetOrOpenWindow(CpuType.Pic18)
+				},
 				new ContextMenuAction() {
 					ActionType = ActionType.OpenGameboyDebugger,
 					Shortcut = () => ConfigManager.Config.Debug.Shortcuts.Get(DebuggerShortcut.OpenGameboyDebugger),

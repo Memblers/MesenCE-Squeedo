@@ -55,6 +55,7 @@ namespace Mesen.Config
 				CpuType.Sms => SmsConfig,
 				CpuType.Gba => GbaConfig,
 				CpuType.Ws => WsConfig,
+				CpuType.Pic18 => NesConfig,
 				_ => throw new NotImplementedException("Unsupport cpu type")
 			};
 		}

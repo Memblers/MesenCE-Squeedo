@@ -195,6 +195,9 @@ protected:
 
 	virtual vector<MapperStateEntry> GetMapperStateEntries() { return {}; }
 
+public:
+	virtual vector<CpuType> GetSecondaryCpuTypes() { return {}; }
+
 	void LoadRomPatch(vector<uint8_t>& orgPrgRom, vector<uint8_t>* orgChrRom = nullptr);
 	void SaveRom(vector<uint8_t>& orgPrgRom, vector<uint8_t>* orgChrRom = nullptr);
 	void SerializeRomDiff(Serializer& s, vector<uint8_t>& orgPrgRom, vector<uint8_t>* orgChrRom = nullptr);

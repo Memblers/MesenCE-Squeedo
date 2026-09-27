@@ -101,6 +101,7 @@ namespace Mesen.Config
 			Add(new() { Shortcut = DebuggerShortcut.OpenSpcDebugger, KeyBinding = new(KeyModifiers.Control, Key.F) });
 			Add(new() { Shortcut = DebuggerShortcut.OpenSa1Debugger, KeyBinding = new() });
 			Add(new() { Shortcut = DebuggerShortcut.OpenSt018Debugger, KeyBinding = new() });
+			Add(new() { Shortcut = DebuggerShortcut.OpenPic18Debugger, KeyBinding = new() });
 			Add(new() { Shortcut = DebuggerShortcut.OpenGsuDebugger, KeyBinding = new() });
 			Add(new() { Shortcut = DebuggerShortcut.OpenNecDspDebugger, KeyBinding = new() });
 			Add(new() { Shortcut = DebuggerShortcut.OpenCx4Debugger, KeyBinding = new() });
@@ -319,6 +320,7 @@ namespace Mesen.Config
 		OpenSpcDebugger,
 		OpenSa1Debugger,
 		OpenSt018Debugger,
+		OpenPic18Debugger,
 		OpenGsuDebugger,
 		OpenNecDspDebugger,
 		OpenCx4Debugger,

@@ -23,6 +23,14 @@
     <ClInclude Include="GBA\GbaWaitStates.h" />
     <ClInclude Include="NES\Epsm.h" />
     <ClInclude Include="NES\Mappers\Homebrew\Rainbow.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\Pic18Types.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\Pic18Cpu.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\Pic18Peripherals.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\IntelHexParser.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\Squeedo.h" />
+    <ClInclude Include="NES\Debugger\pic18\Pic18Debugger.h" />
+    <ClInclude Include="NES\Debugger\pic18\Pic18DisUtils.h" />
+    <ClInclude Include="NES\Debugger\pic18\Pic18TraceLogger.h" />
     <ClInclude Include="NES\Mappers\Homebrew\RainbowAudio.h" />
     <ClInclude Include="NES\Debugger\IExtModeMapperDebug.h" />
     <ClInclude Include="NES\Mappers\Homebrew\FlashS29.h" />
@@ -885,6 +893,10 @@
     <ClCompile Include="NES\Loaders\StudyBoxLoader.cpp" />
     <ClCompile Include="NES\Loaders\UnifLoader.cpp" />
     <ClCompile Include="NES\Mappers\Homebrew\Rainbow.cpp" />
+    <ClCompile Include="NES\Mappers\Squeedo\Pic18Cpu.cpp" />
+    <ClCompile Include="NES\Mappers\Squeedo\Pic18Peripherals.cpp" />
+    <ClCompile Include="NES\Debugger\pic18\Pic18Debugger.cpp" />
+    <ClCompile Include="NES\Debugger\pic18\Pic18DisUtils.cpp" />
     <ClCompile Include="Shared\Movies\BizHawkMovie.cpp" />
     <ClCompile Include="SNES\Input\SnesBlueRetroController.cpp" />
     <ClCompile Include="SNES\Input\SnesNttDataKeypad.cpp" />

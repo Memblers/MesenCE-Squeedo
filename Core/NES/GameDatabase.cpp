@@ -20,7 +20,11 @@ T GameDatabase::ToInt(string value)
 	if(value.empty()) {
 		return 0;
 	}
-	return std::stoi(value);
+	try {
+		return std::stoi(value);
+	} catch(...) {
+		return 0;
+	}
 }
 
 template<typename T>
@@ -28,10 +32,15 @@ T GameDatabase::ToSize(string value)
 {
 	if(value.empty()) {
 		return 0;
-	} else if(value[0] == 'b') {
-		return std::stoi(value.substr(1));
-	} else {
-		return std::stoi(value) * 1024;
+	}
+	try {
+		if(value[0] == 'b') {
+			return std::stoi(value.substr(1));
+		} else {
+			return std::stoi(value) * 1024;
+		}
+	} catch(...) {
+		return 0;
 	}
 }
 
@@ -40,8 +49,9 @@ void GameDatabase::LoadGameDb(vector<string> data)
 	for(string& row : data) {
 		vector<string> values = StringUtilities::Split(row, ',');
 		if(values.size() >= 16) {
-			GameInfo gameInfo;
-			gameInfo.Crc = (uint32_t)std::stoll(values[0], nullptr, 16);
+			try {
+				GameInfo gameInfo;
+				gameInfo.Crc = (uint32_t)std::stoll(values[0], nullptr, 16);
 			gameInfo.System = values[1];
 			gameInfo.Board = values[2];
 			gameInfo.Pcb = values[3];
@@ -65,6 +75,9 @@ void GameDatabase::LoadGameDb(vector<string> data)
 			}
 
 			_gameDatabase[gameInfo.Crc] = gameInfo;
+			} catch(...) {
+				continue;
+			}
 		}
 	}
 

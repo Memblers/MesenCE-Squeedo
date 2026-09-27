@@ -1,0 +1,188 @@
+<UserControl
+xmlns="https://github.com/avaloniaui"
+xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+xmlns:vm="using:Mesen.Debugger.StatusViews"
+xmlns:c="using:Mesen.Controls"
+mc:Ignorable="d" d:DesignWidth="350"
+VerticalAlignment="Stretch"
+HorizontalAlignment="Stretch"
+x:DataType="vm:Pic18StatusViewModel"
+x:Class="Mesen.Debugger.StatusViews.Pic18StatusView"
+>
+<Design.DataContext>
+<vm:Pic18StatusViewModel />
+</Design.DataContext>
+
+<UserControl.Styles>
+<StyleInclude Source="/Styles/DebugStatusStyles.xaml" />
+</UserControl.Styles>
+
+<ScrollViewer>
+<StackPanel>
+<DockPanel>
+<StackPanel DockPanel.Dock="Right">
+<StackPanel Orientation="Horizontal" IsEnabled="{Binding EditAllowed}">
+<TextBlock Margin="0">SP:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegSTKPTR}" Hex="True" Max="0xFF" />
+</StackPanel>
+<TextBox
+TextWrapping="Wrap"
+Width="78"
+Height="65"
+AcceptsReturn="True"
+IsReadOnly="True"
+ScrollViewer.VerticalScrollBarVisibility="Visible"
+Text="{Binding StackPreview}"
+/>
+</StackPanel>
+
+<StackPanel DockPanel.Dock="Top" IsEnabled="{Binding EditAllowed}">
+<WrapPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>PC:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegPC}" Hex="True" Max="0xFFFFFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>W:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegW}" Hex="True" Max="0xFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>BSR:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegBSR}" Hex="True" Max="0xFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>Cycle:</TextBlock>
+<c:MesenNumericTextBox Width="70" Value="{Binding CycleCount}" IsEnabled="False" />
+</StackPanel>
+</WrapPanel>
+
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 2" />
+
+<WrapPanel Margin="0 2 0 0" DockPanel.Dock="Top">
+<StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Top">
+<TextBlock>ST:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegSTATUS}" Hex="True" Max="0xFF" />
+</StackPanel>
+
+<WrapPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagC}" Content="Carry" />
+<CheckBox IsChecked="{Binding FlagDC}" Content="Digit Carry" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagZ}" Content="Zero" />
+<CheckBox IsChecked="{Binding FlagOV}" Content="Overflow" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagN}" Content="Negative" />
+</StackPanel>
+</WrapPanel>
+</WrapPanel>
+
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 4" />
+
+<WrapPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>INTCON:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegINTCON}" Hex="True" Max="0xFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>RCON:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegRCON}" Hex="True" Max="0xFF" />
+</StackPanel>
+</WrapPanel>
+</StackPanel>
+</DockPanel>
+
+<StackPanel IsEnabled="{Binding EditAllowed}">
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 4" />
+
+<!-- FSR Registers -->
+<Grid ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto">
+<TextBlock>FSR0:</TextBlock>
+<c:MesenNumericTextBox Grid.Column="1" Value="{Binding RegFSR0}" Hex="True" Max="0xFFF" />
+<TextBlock Grid.Row="1">FSR1:</TextBlock>
+<c:MesenNumericTextBox Grid.Row="1" Grid.Column="1" Value="{Binding RegFSR1}" Hex="True" Max="0xFFF" />
+<TextBlock Grid.Row="2">FSR2:</TextBlock>
+<c:MesenNumericTextBox Grid.Row="2" Grid.Column="1" Value="{Binding RegFSR2}" Hex="True" Max="0xFFF" />
+<TextBlock Grid.Row="3">TBLPTR:</TextBlock>
+<c:MesenNumericTextBox Grid.Row="3" Grid.Column="1" Value="{Binding RegTBLPTR}" Hex="True" Max="0xFFFFFF" />
+<TextBlock Grid.Row="4">TABLAT:</TextBlock>
+<c:MesenNumericTextBox Grid.Row="4" Grid.Column="1" Value="{Binding RegTABLAT}" Hex="True" Max="0xFF" />
+<TextBlock Grid.Row="5">PROD:</TextBlock>
+<c:MesenNumericTextBox Grid.Row="5" Grid.Column="1" Value="{Binding RegPROD}" Hex="True" Max="0xFFFF" />
+</Grid>
+
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 4" />
+
+<!-- Interrupt Status -->
+<TextBlock FontWeight="Bold" Margin="0 0 0 2">Interrupts</TextBlock>
+
+<!-- INTCON Flags -->
+<WrapPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagGIE}" Content="GIE" />
+<CheckBox IsChecked="{Binding FlagPEIE}" Content="PEIE" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagTMR0IE}" Content="TMR0IE" />
+<CheckBox IsChecked="{Binding FlagINT0IE}" Content="INT0IE" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagTMR0IF}" Content="TMR0IF" />
+<CheckBox IsChecked="{Binding FlagINT0IF}" Content="INT0IF" />
+</StackPanel>
+</WrapPanel>
+
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 4" />
+
+<!-- PIR1 Flags -->
+<WrapPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>PIR1:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegPIR1}" Hex="True" Max="0xFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>PIE1:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegPIE1}" Hex="True" Max="0xFF" />
+</StackPanel>
+</WrapPanel>
+
+<WrapPanel Margin="0 2 0 0">
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagPSPIF}" Content="PSPIF" />
+<CheckBox IsChecked="{Binding FlagPSPIE}" Content="PSPIE" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagTXIF}" Content="TXIF" />
+<CheckBox IsChecked="{Binding FlagTXIE}" Content="TXIE" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagRCIF}" Content="RCIF" />
+<CheckBox IsChecked="{Binding FlagRCIE}" Content="RCIE" />
+</StackPanel>
+<StackPanel>
+<CheckBox IsChecked="{Binding FlagADIF}" Content="ADIF" />
+<CheckBox IsChecked="{Binding FlagTMR1IF}" Content="TMR1IF" />
+</StackPanel>
+</WrapPanel>
+
+<Rectangle Stroke="{StaticResource MesenGrayBorderColor}" StrokeThickness="1" Margin="5 5 5 4" />
+
+<!-- PIR2 Flags -->
+<WrapPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>PIR2:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegPIR2}" Hex="True" Max="0xFF" />
+</StackPanel>
+<StackPanel Orientation="Horizontal">
+<TextBlock>PIE2:</TextBlock>
+<c:MesenNumericTextBox Value="{Binding RegPIE2}" Hex="True" Max="0xFF" />
+</StackPanel>
+</WrapPanel>
+</StackPanel>
+</StackPanel>
+</ScrollViewer>
+</UserControl>

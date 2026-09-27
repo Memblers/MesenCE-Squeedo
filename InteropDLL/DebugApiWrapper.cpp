@@ -18,6 +18,7 @@
 #include "Core/Debugger/ScriptManager.h"
 #include "Core/Debugger/Profiler.h"
 #include "Core/Debugger/IAssembler.h"
+#include "Core/NES/Mappers/Squeedo/Pic18Types.h"
 #include "Core/Debugger/BaseEventManager.h"
 #include "Core/Debugger/ITraceLogger.h"
 #include "Core/Debugger/TraceLogFileSaver.h"
@@ -196,6 +197,65 @@ extern "C"
 	DllExport void __stdcall SetCpuState(BaseState& state, CpuType cpuType)
 	{
 		WithDebugger(void, SetCpuState(state, cpuType));
+	}
+
+	// Lightweight PIC18 registers-only struct (no 2MB memory arrays)
+	struct Pic18CpuRegisters
+	{
+		uint32_t PC;
+		uint8_t W;
+		uint8_t BSR;
+		uint8_t STATUS;
+		uint8_t INTCON;
+		uint8_t STKPTR;
+		uint8_t _pad0;
+		uint32_t Stack[31];
+		uint16_t FSR[3];
+		uint32_t TBLPTR;
+		uint8_t TABLAT;
+		uint8_t PRODH;
+		uint8_t PRODL;
+		uint8_t PCLATU;
+		uint8_t PCLATH;
+		uint8_t RCON;
+		uint8_t INTCON2;
+		uint8_t INTCON3;
+		uint8_t PIR1;
+		uint8_t PIR2;
+		uint8_t PIE1;
+		uint8_t PIE2;
+		int64_t CycleCount;
+	};
+
+	DllExport void __stdcall GetPic18CpuRegisters(Pic18CpuRegisters& out)
+	{
+		WrapDebuggerCall<void>([&](Debugger* dbg) -> void {
+			// Heap-allocate since Pic18CpuState is ~2MB (has embedded memory)
+			auto cpu = std::make_unique<Pic18CpuState>();
+			dbg->GetCpuState(*cpu, CpuType::Pic18);
+			out.PC = cpu->PC;
+			out.W = cpu->W;
+			out.BSR = cpu->BSR;
+			out.STATUS = cpu->STATUS;
+			out.INTCON = cpu->INTCON;
+			out.STKPTR = cpu->STKPTR;
+			memcpy(out.Stack, cpu->Stack, sizeof(cpu->Stack));
+			memcpy(out.FSR, cpu->FSR, sizeof(cpu->FSR));
+			out.TBLPTR = cpu->TBLPTR;
+			out.TABLAT = cpu->TABLAT;
+			out.PRODH = cpu->PRODH;
+			out.PRODL = cpu->PRODL;
+			out.PCLATU = cpu->PCLATU;
+			out.PCLATH = cpu->PCLATH;
+			out.RCON = cpu->RCON;
+			out.INTCON2 = cpu->Data[Pic18Sfr::INTCON2 & 0xFFF];
+			out.INTCON3 = cpu->Data[Pic18Sfr::INTCON3 & 0xFFF];
+			out.PIR1 = cpu->Data[Pic18Sfr::PIR1 & 0xFFF];
+			out.PIR2 = cpu->Data[Pic18Sfr::PIR2 & 0xFFF];
+			out.PIE1 = cpu->Data[Pic18Sfr::PIE1 & 0xFFF];
+			out.PIE2 = cpu->Data[Pic18Sfr::PIE2 & 0xFFF];
+			out.CycleCount = cpu->CycleCount;
+		});
 	}
 
 	DllExport void __stdcall SetPpuState(BaseState& state, CpuType cpuType)

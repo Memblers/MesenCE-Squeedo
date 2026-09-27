@@ -162,6 +162,7 @@ namespace Mesen.Debugger.ViewModels
 				DebuggerShortcut.OpenSpcDebugger,
 				DebuggerShortcut.OpenSa1Debugger,
 				DebuggerShortcut.OpenSt018Debugger,
+				DebuggerShortcut.OpenPic18Debugger,
 				DebuggerShortcut.OpenGameboyDebugger,
 				DebuggerShortcut.OpenGsuDebugger,
 				DebuggerShortcut.OpenNecDspDebugger,

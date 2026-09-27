@@ -2842,7 +2842,8 @@ E
 			<Value ID="Pce">PC Engine</Value>
 			<Value ID="Sms">SMS</Value>
 			<Value ID="Gba">GBA</Value>
-			<Value ID="Ws">WS</Value>
+			<Value ID="Ws">WonderSwan</Value>
+			<Value ID="Pic18">PIC18</Value>
 		</Enum>
 		
 		<Enum ID="MemoryType">
@@ -2944,6 +2945,11 @@ E
 			<Value ID="WsBootRom">Boot ROM</Value>
 			<Value ID="WsInternalEeprom">IEEPROM (Internal)</Value>
 			<Value ID="WsPort">I/O Port</Value>
+
+			<Value ID="Pic18Memory">CPU Memory</Value>
+			<Value ID="Pic18ProgramRom">Program ROM</Value>
+			<Value ID="Pic18DataRam">Data RAM</Value>
+			<Value ID="Pic18SfrRam">SFR</Value>
 
 			<Value ID="None">None</Value>
 		</Enum>
@@ -3316,6 +3322,7 @@ E
 			<Value ID="OpenSpcDebugger">Open SPC Debugger</Value>
 			<Value ID="OpenSa1Debugger">Open SA-1 Debugger</Value>
 			<Value ID="OpenSt018Debugger">Open ST018 Debugger</Value>
+			<Value ID="OpenPic18Debugger">Open PIC18 Debugger</Value>
 			<Value ID="OpenGsuDebugger">Open GSU Debugger</Value>
 			<Value ID="OpenNecDspDebugger">Open DSP Debugger</Value>
 			<Value ID="OpenCx4Debugger">Open CX4 Debugger</Value>
@@ -3599,6 +3606,7 @@ E
 			<Value ID="OpenSpcDebugger">SPC Debugger</Value>
 			<Value ID="OpenSa1Debugger">SA-1 Debugger</Value>
 			<Value ID="OpenSt018Debugger">ST018 Debugger</Value>
+			<Value ID="OpenPic18Debugger">PIC18 Debugger</Value>
 			<Value ID="OpenGsuDebugger">GSU Debugger</Value>
 			<Value ID="OpenNecDspDebugger">DSP Debugger</Value>
 			<Value ID="OpenCx4Debugger">CX4 Debugger</Value>

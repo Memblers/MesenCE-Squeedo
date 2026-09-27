@@ -30,7 +30,7 @@ bool RomLoader::LoadFile(VirtualFile& romFile, RomData& romData, bool databaseEn
 		return false;
 	}
 
-	string filename = romFile.GetFileName();
+	string filename = romFile.GetFilePath();
 	string romName = FolderUtilities::GetFilename(filename, true);
 
 	uint32_t crc = CRC32::GetCRC(fileData.data(), fileData.size());

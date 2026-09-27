@@ -1178,4 +1178,5 @@ enum class DebuggerFlags
 	SmsDebuggerEnabled = (1 << 10),
 	GbaDebuggerEnabled = (1 << 11),
 	WsDebuggerEnabled = (1 << 12),
+	Pic18DebuggerEnabled = (1 << 13),
 };

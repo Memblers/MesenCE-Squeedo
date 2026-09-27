@@ -23,6 +23,7 @@ public:
 			case CpuType::Sms: return MemoryType::SmsMemory;
 			case CpuType::Gba: return MemoryType::GbaMemory;
 			case CpuType::Ws: return MemoryType::WsMemory;
+			case CpuType::Pic18: return MemoryType::Pic18Memory;
 		}
 
 		throw std::runtime_error("Invalid CPU type");
@@ -44,6 +45,7 @@ public:
 			case CpuType::Sms: return 4;
 			case CpuType::Gba: return 8;
 			case CpuType::Ws: return 5;
+			case CpuType::Pic18: return 4;
 		}
 
 		throw std::runtime_error("Invalid CPU type");
@@ -54,6 +56,7 @@ public:
 		switch(type) {
 			case CpuType::St018:
 			case CpuType::Gba:
+			case CpuType::Pic18:
 				return ByteCodeFormat::HexValue;
 		}
 
@@ -181,6 +184,12 @@ public:
 			case MemoryType::WsPort:
 				return CpuType::Ws;
 
+			case MemoryType::Pic18Memory:
+			case MemoryType::Pic18ProgramRom:
+			case MemoryType::Pic18DataRam:
+			case MemoryType::Pic18SfrRam:
+				return CpuType::Pic18;
+
 			default:
 				throw std::runtime_error("Invalid CPU type");
 		}
@@ -193,7 +202,7 @@ public:
 
 	static constexpr MemoryType GetLastCpuMemoryType()
 	{
-		return MemoryType::WsMemory;
+		return MemoryType::Pic18Memory;
 	}
 
 	static constexpr bool IsPpuMemory(MemoryType memType)
@@ -251,6 +260,7 @@ public:
 			case MemoryType::SmsPrgRom:
 			case MemoryType::GbaPrgRom:
 			case MemoryType::WsPrgRom:
+			case MemoryType::Pic18ProgramRom:
 				return true;
 
 			default:
@@ -303,7 +313,7 @@ public:
 
 	static constexpr CpuType GetLastCpuType()
 	{
-		return CpuType::Ws;
+		return CpuType::Pic18;
 	}
 
 	static string AddressToHex(CpuType cpuType, int32_t address)

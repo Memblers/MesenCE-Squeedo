@@ -16,6 +16,7 @@ enum class MemoryType
 	SmsMemory,
 	GbaMemory,
 	WsMemory,
+	Pic18Memory,
 
 	SnesPrgRom,
 	SnesWorkRam,
@@ -101,6 +102,10 @@ enum class MemoryType
 	WsBootRom,
 	WsInternalEeprom,
 	WsPort,
+
+	Pic18ProgramRom,
+	Pic18DataRam,
+	Pic18SfrRam,
 
 	None
 };

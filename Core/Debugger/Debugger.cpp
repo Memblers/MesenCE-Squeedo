@@ -45,6 +45,8 @@
 #include "GBA/GbaTypes.h"
 #include "WS/Debugger/WsDebugger.h"
 #include "WS/WsTypes.h"
+#include "NES/Debugger/pic18/Pic18Debugger.h"
+#include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "Shared/BaseControlManager.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/NotificationManager.h"
@@ -97,6 +99,7 @@ Debugger::Debugger(Emulator* emu, IConsole* console)
 			case CpuType::Sms: debugger.reset(new SmsDebugger(this)); break;
 			case CpuType::Gba: debugger.reset(new GbaDebugger(this)); break;
 			case CpuType::Ws: debugger.reset(new WsDebugger(this)); break;
+			case CpuType::Pic18: debugger.reset(new Pic18Debugger(this)); break;
 			default: throw std::runtime_error("Unsupported CPU type");
 		}
 
@@ -190,6 +193,7 @@ uint64_t Debugger::GetCpuCycleCount()
 		case CpuType::Sms: return GetDebugger<type, SmsDebugger>()->GetCpuCycleCount();
 		case CpuType::Gba: return GetDebugger<type, GbaDebugger>()->GetCpuCycleCount();
 		case CpuType::Ws: return GetDebugger<type, WsDebugger>()->GetCpuCycleCount();
+		case CpuType::Pic18: return GetDebugger<type, Pic18Debugger>()->GetCpuCycleCount();
 		default: return 0; break;
 	}
 }
@@ -238,6 +242,7 @@ void Debugger::ProcessInstruction()
 		case CpuType::Sms: GetDebugger<type, SmsDebugger>()->ProcessInstruction(); break;
 		case CpuType::Gba: GetDebugger<type, GbaDebugger>()->ProcessInstruction(); break;
 		case CpuType::Ws: GetDebugger<type, WsDebugger>()->ProcessInstruction(); break;
+		case CpuType::Pic18: GetDebugger<type, Pic18Debugger>()->ProcessInstruction(); break;
 	}
 
 	debugger->AllowChangeProgramCounter = false;
@@ -271,6 +276,7 @@ void Debugger::ProcessMemoryRead(uint32_t addr, T& value, MemoryOperationType op
 		case CpuType::Pce: GetDebugger<CpuType::Pce, PceDebugger>()->ProcessRead(addr, value, opType); break;
 		case CpuType::Sms: GetDebugger<CpuType::Sms, SmsDebugger>()->ProcessRead(addr, value, opType); break;
 		case CpuType::Gba: GetDebugger<CpuType::Gba, GbaDebugger>()->ProcessRead<accessWidth>(addr, value, opType); break;
+		case CpuType::Pic18: GetDebugger<CpuType::Pic18, Pic18Debugger>()->ProcessRead(addr, value, opType); break;
 		case CpuType::Ws:
 			if constexpr(accessWidth <= 2) {
 				GetDebugger<CpuType::Ws, WsDebugger>()->ProcessRead<accessWidth>(addr, value, opType);
@@ -304,6 +310,7 @@ bool Debugger::ProcessMemoryWrite(uint32_t addr, T& value, MemoryOperationType o
 		case CpuType::Pce: GetDebugger<CpuType::Pce, PceDebugger>()->ProcessWrite(addr, value, opType); break;
 		case CpuType::Sms: GetDebugger<CpuType::Sms, SmsDebugger>()->ProcessWrite(addr, value, opType); break;
 		case CpuType::Gba: GetDebugger<CpuType::Gba, GbaDebugger>()->ProcessWrite<accessWidth>(addr, value, opType); break;
+		case CpuType::Pic18: GetDebugger<CpuType::Pic18, Pic18Debugger>()->ProcessWrite(addr, value, opType); break;
 		case CpuType::Ws:
 			if constexpr(accessWidth <= 2) {
 				GetDebugger<CpuType::Ws, WsDebugger>()->ProcessWrite<accessWidth>(addr, value, opType);
@@ -870,6 +877,7 @@ void Debugger::GetCpuState(BaseState& dstState, CpuType cpuType)
 		case CpuType::Sms: memcpy(&dstState, &srcState, sizeof(SmsCpuState)); break;
 		case CpuType::Gba: memcpy(&dstState, &srcState, sizeof(GbaCpuState)); break;
 		case CpuType::Ws: memcpy(&dstState, &srcState, sizeof(WsCpuState)); break;
+		case CpuType::Pic18: memcpy(&dstState, &srcState, sizeof(Pic18CpuState)); break;
 	}
 }
 
@@ -891,6 +899,7 @@ void Debugger::SetCpuState(BaseState& srcState, CpuType cpuType)
 		case CpuType::Sms: memcpy(&dstState, &srcState, sizeof(SmsCpuState)); break;
 		case CpuType::Gba: memcpy(&dstState, &srcState, sizeof(GbaCpuState)); break;
 		case CpuType::Ws: memcpy(&dstState, &srcState, sizeof(WsCpuState)); break;
+		case CpuType::Pic18: memcpy(&dstState, &srcState, sizeof(Pic18CpuState)); break;
 	}
 }
 
@@ -1233,6 +1242,7 @@ template void Debugger::ProcessInstruction<CpuType::Pce>();
 template void Debugger::ProcessInstruction<CpuType::Sms>();
 template void Debugger::ProcessInstruction<CpuType::Gba>();
 template void Debugger::ProcessInstruction<CpuType::Ws>();
+template void Debugger::ProcessInstruction<CpuType::Pic18>();
 
 template void Debugger::ProcessMemoryRead<CpuType::Snes>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 template void Debugger::ProcessMemoryRead<CpuType::Sa1>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
@@ -1254,6 +1264,8 @@ template void Debugger::ProcessMemoryRead<CpuType::Gba, 4>(uint32_t addr, uint32
 template void Debugger::ProcessMemoryRead<CpuType::Ws, 1>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 template void Debugger::ProcessMemoryRead<CpuType::Ws, 2>(uint32_t addr, uint16_t& value, MemoryOperationType opType);
 
+template void Debugger::ProcessMemoryRead<CpuType::Pic18>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
+
 template bool Debugger::ProcessMemoryWrite<CpuType::Snes>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 template bool Debugger::ProcessMemoryWrite<CpuType::Sa1>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 template bool Debugger::ProcessMemoryWrite<CpuType::Spc>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
@@ -1272,6 +1284,7 @@ template bool Debugger::ProcessMemoryWrite<CpuType::Gba, 2>(uint32_t addr, uint3
 template bool Debugger::ProcessMemoryWrite<CpuType::Gba, 4>(uint32_t addr, uint32_t& value, MemoryOperationType opType);
 template bool Debugger::ProcessMemoryWrite<CpuType::Ws, 1>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 template bool Debugger::ProcessMemoryWrite<CpuType::Ws, 2>(uint32_t addr, uint16_t& value, MemoryOperationType opType);
+template bool Debugger::ProcessMemoryWrite<CpuType::Pic18>(uint32_t addr, uint8_t& value, MemoryOperationType opType);
 
 template void Debugger::ProcessMemoryAccess<CpuType::Nes, MemoryType::NesMapperRam, MemoryOperationType::Read>(uint32_t addr, uint8_t& value);
 template void Debugger::ProcessMemoryAccess<CpuType::Nes, MemoryType::NesMapperRam, MemoryOperationType::Write>(uint32_t addr, uint8_t& value);
@@ -1312,6 +1325,8 @@ template void Debugger::ProcessInterrupt<CpuType::Pce>(uint32_t originalPc, uint
 template void Debugger::ProcessInterrupt<CpuType::Sms>(uint32_t originalPc, uint32_t currentPc, bool forNmi);
 template void Debugger::ProcessInterrupt<CpuType::Gba>(uint32_t originalPc, uint32_t currentPc, bool forNmi);
 template void Debugger::ProcessInterrupt<CpuType::Ws>(uint32_t originalPc, uint32_t currentPc, bool forNmi);
+
+template void Debugger::ProcessInterrupt<CpuType::Pic18>(uint32_t originalPc, uint32_t currentPc, bool forNmi);
 
 template void Debugger::ProcessPpuRead<CpuType::Snes>(uint16_t addr, uint8_t& value, MemoryType memoryType, MemoryOperationType opType);
 template void Debugger::ProcessPpuRead<CpuType::Gameboy>(uint16_t addr, uint8_t& value, MemoryType memoryType, MemoryOperationType opType);

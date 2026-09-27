@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 
 namespace Mesen.Interop
 {
@@ -125,6 +125,12 @@ namespace Mesen.Interop
 				case MemoryType.WsPort:
 					return CpuType.Ws;
 
+				case MemoryType.Pic18Memory:
+				case MemoryType.Pic18ProgramRom:
+				case MemoryType.Pic18DataRam:
+				case MemoryType.Pic18SfrRam:
+					return CpuType.Pic18;
+
 				default:
 					throw new NotImplementedException("Unsupported cpu type");
 			}
@@ -237,6 +243,7 @@ namespace Mesen.Interop
 				case MemoryType.SmsMemory:
 				case MemoryType.GbaMemory:
 				case MemoryType.WsMemory:
+				case MemoryType.Pic18Memory:
 					return true;
 			}
 			return false;
@@ -340,6 +347,13 @@ namespace Mesen.Interop
 				case MemoryType.WsBootRom:
 				case MemoryType.WsPort:
 					return true;
+
+				//PIC18
+				case MemoryType.Pic18Memory:
+				case MemoryType.Pic18ProgramRom:
+				case MemoryType.Pic18DataRam:
+				case MemoryType.Pic18SfrRam:
+					return true;
 			}
 
 			return false;
@@ -361,6 +375,7 @@ namespace Mesen.Interop
 				case MemoryType.SmsMemory:
 				case MemoryType.GbaMemory:
 				case MemoryType.WsMemory:
+				case MemoryType.Pic18Memory:
 					return true;
 			}
 
@@ -548,6 +563,11 @@ namespace Mesen.Interop
 				MemoryType.WsBootRom => "BOOT",
 				MemoryType.WsInternalEeprom => "IEEPROM",
 				MemoryType.WsPort => "PORT",
+
+				MemoryType.Pic18Memory => "CPU",
+				MemoryType.Pic18ProgramRom => "ROM",
+				MemoryType.Pic18DataRam => "RAM",
+				MemoryType.Pic18SfrRam => "SFR",
 
 				MemoryType.None => "n/a",
 

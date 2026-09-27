@@ -26,6 +26,7 @@
 #include "NES/Mappers/Homebrew/SealieComputing.h"
 #include "NES/Mappers/Homebrew/UnRom512.h"
 #include "NES/Mappers/Homebrew/UnlDripGame.h"
+#include "NES/Mappers/Squeedo/Squeedo.h"
 #include "NES/Mappers/Irem/BnRom.h"
 #include "NES/Mappers/Irem/IremG101.h"
 #include "NES/Mappers/Irem/IremH3001.h"
@@ -513,6 +514,7 @@ BaseMapper* MapperFactory::GetMapperFromID(RomData& romData)
 		case 244: return new Mapper244();
 		case 245: return new MMC3_245();
 		case 246: return new Mapper246();
+		case 248: return new Squeedo();
 		case 249: return new MMC3_249();
 		case 250: return new MMC3_250();
 		case 252: return new Waixing252();

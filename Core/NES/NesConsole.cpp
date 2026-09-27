@@ -390,13 +390,20 @@ ConsoleRegion NesConsole::GetRegion()
 
 vector<CpuType> NesConsole::GetCpuTypes()
 {
-	return { CpuType::Nes };
+	vector<CpuType> types = { CpuType::Nes };
+	if(_mapper) {
+		auto secondary = _mapper->GetSecondaryCpuTypes();
+		types.insert(types.end(), secondary.begin(), secondary.end());
+	}
+	return types;
 }
 
 AddressInfo NesConsole::GetAbsoluteAddress(AddressInfo& relAddress)
 {
 	if(relAddress.Type == MemoryType::NesMemory) {
 		return _mapper->GetAbsoluteAddress(relAddress.Address);
+	} else if(relAddress.Type == MemoryType::Pic18Memory) {
+		return { relAddress.Address, MemoryType::Pic18ProgramRom };
 	} else {
 		return _mapper->GetPpuAbsoluteAddress(relAddress.Address);
 	}
@@ -404,6 +411,9 @@ AddressInfo NesConsole::GetAbsoluteAddress(AddressInfo& relAddress)
 
 AddressInfo NesConsole::GetRelativeAddress(AddressInfo& absAddress, CpuType cpuType)
 {
+	if(absAddress.Type == MemoryType::Pic18ProgramRom) {
+		return { absAddress.Address, MemoryType::Pic18Memory };
+	}
 	return _mapper->GetRelativeAddress(absAddress);
 }
 

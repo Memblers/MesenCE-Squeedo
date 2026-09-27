@@ -557,6 +557,7 @@ namespace Mesen.Interop
 				CpuType.Sms => state is SmsCpuState,
 				CpuType.Gba => state is GbaCpuState,
 				CpuType.Ws => state is WsCpuState,
+				CpuType.Pic18 => true,
 				_ => false
 			};
 		}
@@ -600,6 +601,7 @@ namespace Mesen.Interop
 		SmsMemory,
 		GbaMemory,
 		WsMemory,
+		Pic18Memory,
 
 		SnesPrgRom,
 		SnesWorkRam,
@@ -685,6 +687,10 @@ namespace Mesen.Interop
 		WsBootRom,
 		WsInternalEeprom,
 		WsPort,
+
+		Pic18ProgramRom,
+		Pic18DataRam,
+		Pic18SfrRam,
 
 		None,
 	}
@@ -1548,7 +1554,8 @@ namespace Mesen.Interop
 		Pce,
 		Sms,
 		Gba,
-		Ws
+		Ws,
+		Pic18
 	}
 
 	public enum StepType
