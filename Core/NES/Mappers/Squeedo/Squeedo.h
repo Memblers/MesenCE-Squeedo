@@ -65,10 +65,13 @@ protected:
 	{
 		SetMirroringType(MirroringType::FourScreens);
 
-		// Flash chip emulation
+		// Flash chip emulation (SST39SF040, 512KB)
 		_flash.reset(new FlashSST39SF040(_prgRom, _prgSize));
 		_orgPrgRom = vector<uint8_t>(_prgRom, _prgRom + _prgSize);
 		ApplySaveData();
+
+		// Register $8000-$FFFF for flash read/write interception
+		AddRegisterRange(0x8000, 0xFFFF, MemoryOperation::Any);
 
 		// Initialize PIC18 CPU
 		_picCpu.reset(new Pic18Cpu(_picState));
@@ -236,16 +239,35 @@ protected:
 		}
 	}
 
-	// Transparent PSP bridge — the mapper does NOT interpret register meanings.
+	// Transparent PSP bridge at $5000-$5FFF — the mapper does NOT interpret register meanings.
 	// NES reads return whatever the PIC has pre-loaded on PortD.
 	// NES writes are delivered to the PIC via PSP interrupt.
+	//
+	// At $8000-$FFFF, flash chip emulation (SST39SF040):
+	// Writes follow the SST command protocol ($5555/$AA, $2AAA/$55, $5555/cmd).
+	// Reads in software ID mode return manufacturer/device bytes.
 	uint8_t ReadRegister(uint16_t addr) override
 	{
+		if(addr >= 0x8000) {
+			int16_t value = _flash->Read(addr);
+			if(value >= 0) {
+				return (uint8_t)value;
+			}
+			return BaseMapper::InternalReadRam(addr);
+		}
 		return _picPeripherals->NesRead(addr & 0x1F);
 	}
 
 	void WriteRegister(uint16_t addr, uint8_t value) override
 	{
+		if(addr >= 0x8000) {
+			// Flash byte program / erase command sequence
+			// Address = current PRG bank (PortA) << 15 | NES offset
+			uint8_t portA = _picState.Data[Pic18Sfr::PORTA & 0xFFF];
+			uint32_t flashAddr = ((portA & 0x0F) << 15) | (addr & 0x7FFF);
+			_flash->Write(flashAddr, value);
+			return;
+		}
 		_picPeripherals->NesWrite(addr & 0x1F, value);
 	}
 
