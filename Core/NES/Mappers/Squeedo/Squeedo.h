@@ -204,6 +204,13 @@ protected:
 		// With 16KB pages, each 32KB bank = 2 consecutive pages
 		uint8_t portA = _picState.Data[Pic18Sfr::PORTA & 0xFFF];
 		if(portA != _lastPortA) {
+			// PIC RA5 → NES /IRQ (active low: RA5=0 → IRQ asserted)
+			bool ra5 = (portA >> 5) & 1;
+			bool lastRa5 = (_lastPortA >> 5) & 1;
+			if(ra5 != lastRa5) {
+				SetIrq(!ra5);  // RA5 low = IRQ active
+			}
+
 			_lastPortA = portA;
 			SelectPrgPage2x(0, (portA & 0x0F) * 2);
 		}

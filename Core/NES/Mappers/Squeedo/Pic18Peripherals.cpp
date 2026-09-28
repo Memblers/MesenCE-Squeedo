@@ -135,7 +135,14 @@ void Pic18Peripherals::ClockTimers(int cycles)
 uint8_t Pic18Peripherals::NesRead(uint8_t regAddr)
 {
 	// NES reading from PSP — return whatever PIC has pre-loaded on PortD
+	_pspLatchAddr = regAddr & 0x1F;
 	_state.PspObf = false;
+	_state.Data[Pic18Sfr::PORTB & 0xFFF] = (_state.Data[Pic18Sfr::PORTB & 0xFFF] & 0xE0) | (regAddr & 0x1F);  // Address on PortB 0-4
+
+	// Set PSPIF and trigger high-priority interrupt (PSP fires on both read and write)
+	_state.Data[Pic18Sfr::PIR1 & 0xFFF] |= Pic18Pir1Bits::PSPIF;
+	_state.InterruptPending = true;
+
 	return _state.PspPortDOutput;
 }
 
@@ -200,6 +207,12 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr)
 			}
 		}
 		return _state.Data[Pic18Sfr::RCREG & 0xFFF];
+
+	// TRISE: bits 4-5 are read-only PSP status (IBF, OBF), must reflect live state
+	case Pic18Sfr::TRISE:
+		return (_state.Data[Pic18Sfr::TRISE & 0xFFF] & 0x8F)
+			| (_state.PspIbf ? 0x10 : 0x00)  // bit 4 = IBF
+			| (_state.PspObf ? 0x20 : 0x00);  // bit 5 = OBF
 
 	// FSR reads - return live values from _state.FSR (not stale Data memory)
 	case Pic18Sfr::FSR0L: return _state.FSR[0] & 0xFF;
