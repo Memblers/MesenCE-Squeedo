@@ -185,6 +185,18 @@
 			<c:OptionSection Header="{l:Translate grpHardware}">
 				<v:ShortcutKeysTabView HeaderMargin="0 0 0 0" Margin="0 0 10 0" ShortcutKeys="{Binding ShortcutKeys}" />
 			</c:OptionSection>
+			<c:OptionSection Header="Serial Port (Squeedo)">
+				<StackPanel Spacing="8">
+					<CheckBox IsChecked="{Binding Config.SerialPortEnabled}" Content="Enable serial port bridge (connects PIC18 UART to a host serial port)" />
+					<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" IsEnabled="{Binding Config.SerialPortEnabled}">
+						<TextBlock Grid.Row="0" Text="Port name" VerticalAlignment="Center" Margin="0 0 5 0" />
+						<TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Config.SerialPortName}" PlaceholderText="e.g. COM3 or /dev/ttyUSB0" MaxWidth="250" HorizontalAlignment="Left" />
+						<TextBlock Grid.Row="1" Text="Baud rate" VerticalAlignment="Center" Margin="0 5 5 0" />
+						<c:MesenNumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding Config.SerialBaudRate}" Minimum="1200" Maximum="921600" Margin="0 5 0 0" />
+					</Grid>
+					<TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource DisabledForeground}" Text="Connects the emulated PIC18 UART to a real or virtual serial port (e.g. com0com on Windows). Requires a Squeedo ROM to be loaded." />
+				</StackPanel>
+			</c:OptionSection>
 		</StackPanel>
 	</ScrollViewer>
 </UserControl>

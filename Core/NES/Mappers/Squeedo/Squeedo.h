@@ -3,6 +3,7 @@
 #include "NES/BaseMapper.h"
 #include "NES/Mappers/Squeedo/Pic18Cpu.h"
 #include "NES/Mappers/Squeedo/Pic18Peripherals.h"
+#include "NES/Mappers/Squeedo/SerialPortBridge.h"
 #include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "NES/Mappers/Squeedo/IntelHexParser.h"
 #include "NES/Mappers/Homebrew/FlashSST39SF040.h"
@@ -37,6 +38,10 @@ private:
 
 	// IRQ state
 	bool _irqActive = false;
+
+	// Serial port bridge — static so it survives ROM reloads and can be
+	// explicitly closed before opening a new connection.
+	static unique_ptr<SerialPortBridge> _sSerialBridge;
 
 	// Cached GPIO state for detecting changes (init to impossible values so first ApplyGpioBanking always fires)
 	uint8_t _lastPortA = 0xFF;  // PRG bank bits (RA0-RA3)
@@ -84,6 +89,13 @@ protected:
 			SetIrq(active);
 		});
 
+		// TX callback: PIC TXREG → serial port bridge
+		_picPeripherals->SetTxCallback([this](uint8_t byte) {
+			if(_sSerialBridge) {
+				_sSerialBridge->SendByte(byte);
+			}
+		});
+
 		// Load PIC firmware from companion .hex file
 		LoadPicFirmware(romData);
 
@@ -104,6 +116,20 @@ protected:
 
 		// Apply initial banking from PIC GPIO state (all zero after reset)
 		ApplyGpioBanking();
+
+		// Start serial port bridge if enabled in config
+		const NesConfig& cfg = _console->GetNesConfig();
+		MessageManager::Log("[Squeedo] Serial config: enabled=" + std::to_string(cfg.SerialPortEnabled) + " port='" + cfg.SerialPortName + "' baud=" + std::to_string(cfg.SerialBaudRate));
+		if(cfg.SerialPortEnabled && cfg.SerialPortName[0] != '\0') {
+			// Close any existing bridge from a previous ROM load
+			if(_sSerialBridge) {
+				_sSerialBridge->Stop();
+			}
+			_sSerialBridge.reset(new SerialPortBridge());
+			if(!_sSerialBridge->Start(cfg.SerialPortName, cfg.SerialBaudRate)) {
+				_sSerialBridge.reset();
+			}
+		}
 	}
 
 	void ApplySaveData()
@@ -237,6 +263,12 @@ protected:
 		if(_picPeripherals->CheckAndClearGpioDirty()) {
 			ApplyGpioBanking();
 		}
+
+		// Poll serial port bridge for received bytes
+		if(_sSerialBridge && _sSerialBridge->IsRunning()) {
+			_sSerialBridge->PollReceivedBytes(_picPeripherals.get());
+			_sSerialBridge->PollStatusLog();
+		}
 	}
 
 	// Transparent PSP bridge at $5000-$5FFF — the mapper does NOT interpret register meanings.
@@ -328,3 +360,6 @@ public:
 	Pic18Cpu* GetPicCpu() { return _picCpu.get(); }
 	Pic18CpuState& GetPicState() { return _picState; }
 };
+
+// Static member definition
+inline unique_ptr<SerialPortBridge> Squeedo::_sSerialBridge;

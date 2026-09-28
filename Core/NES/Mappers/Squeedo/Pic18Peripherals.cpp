@@ -256,6 +256,9 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 		_state.Data[Pic18Sfr::TXSTA & 0xFFF] &= ~(1 << Pic18TxstaBits::TRMT);  // Shift reg busy
 		_txBusy = true;
 		_txCycleCounter = 100;  // Simplified: complete after ~100 PIC cycles
+		if(_txCallback) {
+			_txCallback(value);  // Send byte to serial port bridge
+		}
 		return;
 
 	case Pic18Sfr::PORTA:

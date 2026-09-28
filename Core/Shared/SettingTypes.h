@@ -762,6 +762,11 @@ struct NesConfig
 	int32_t StereoPanningAngle = 0;
 	int32_t StereoCombFilterDelay = 0;
 	int32_t StereoCombFilterStrength = 0;
+
+	// Serial port (Squeedo mapper UART bridge)
+	char SerialPortName[256] = {};
+	uint32_t SerialBaudRate = 9600;
+	bool SerialPortEnabled = false;
 };
 
 enum class SmsRevision

@@ -26,6 +26,7 @@
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Types.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Cpu.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Peripherals.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\SerialPortBridge.h" />
     <ClInclude Include="NES\Mappers\Squeedo\IntelHexParser.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Squeedo.h" />
     <ClInclude Include="NES\Debugger\pic18\Pic18Debugger.h" />
@@ -767,6 +768,7 @@
     <ClInclude Include="Netplay\SelectControllerMessage.h" />
     <ClInclude Include="Netplay\ServerInformationMessage.h" />
     <ClInclude Include="Shared\SettingTypes.h" />
+    <ClInclude Include="Shared\SerialPort.h" />
     <ClInclude Include="Shared\ShortcutKeyHandler.h" />
     <ClInclude Include="SNES\Input\SnesController.h" />
     <ClInclude Include="Shared\MemoryType.h" />
@@ -895,6 +897,7 @@
     <ClCompile Include="NES\Mappers\Homebrew\Rainbow.cpp" />
     <ClCompile Include="NES\Mappers\Squeedo\Pic18Cpu.cpp" />
     <ClCompile Include="NES\Mappers\Squeedo\Pic18Peripherals.cpp" />
+    <ClCompile Include="NES\Mappers\Squeedo\SerialPortBridge.cpp" />
     <ClCompile Include="NES\Debugger\pic18\Pic18Debugger.cpp" />
     <ClCompile Include="NES\Debugger\pic18\Pic18DisUtils.cpp" />
     <ClCompile Include="Shared\Movies\BizHawkMovie.cpp" />
@@ -1099,6 +1102,9 @@
     <ClCompile Include="SNES\Coprocessors\SDD1\Sdd1Decomp.cpp" />
     <ClCompile Include="SNES\Coprocessors\SDD1\Sdd1Mmc.cpp" />
     <ClCompile Include="Shared\ShortcutKeyHandler.cpp" />
+    <ClCompile Include="Shared\SerialPort.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
     <ClCompile Include="SNES\Input\SnesController.cpp" />
     <ClCompile Include="Shared\Audio\SoundMixer.cpp" />
     <ClCompile Include="Shared\Audio\SoundResampler.cpp" />

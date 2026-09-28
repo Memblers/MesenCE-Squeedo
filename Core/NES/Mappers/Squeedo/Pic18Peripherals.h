@@ -41,8 +41,9 @@ private:
 	bool _rxDataReady = false;
 	deque<uint8_t> _rxBuffer;
 
-	// IRQ callback to mapper
+	// Callbacks to mapper
 	std::function<void(bool)> _irqCallback;
+	std::function<void(uint8_t)> _txCallback;
 
 	// Set by WriteSfr when PORTA/B/C or LATA/B/C are written,
 	// so the mapper can skip ApplyGpioBanking when nothing changed.
@@ -59,6 +60,7 @@ public:
 
 	void SetCpu(Pic18Cpu* cpu) { _cpu = cpu; }
 	void SetIrqCallback(std::function<void(bool)> callback) { _irqCallback = callback; }
+	void SetTxCallback(std::function<void(uint8_t)> callback) { _txCallback = callback; }
 
 	// Called once per PIC instruction cycle
 	void ClockTimers(int cycles);

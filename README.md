@@ -1,37 +1,32 @@
-# Mesen Community Edition
+# Mesen Community Edition - Squeedo
 
 Mesen is a multi-system emulator for Windows, Linux, and macOS. It supports NES, SNES, Game Boy (GB/SGB/GBC), Game Boy Advance, PC Engine, SMS/Game Gear, and WonderSwan (WS/WSC).
 
 This is a community-managed fork, created to maintain and expand this emulator into the future.
 
-## Releases
+This fork of Mesen Community Edition adds support for the Squeedo mapper, a flash cart prototype from 2005, which was also used for certain builds of MIDINES.  Squeedo includes a PIC18F4620, with a bidirectional parallel port interface to the NES data bus.
 
-The latest stable version is available from the [releases page on GitHub](https://github.com/nesdev-org/MesenCE/releases).
+## Squeedo Specs
 
-## Development Builds
+PIC18F4620 is an MCU released in 2004, and was the best available with this parallel port feature in a DIP-40 package.  During development, other parts considered for cost reasons were PIC16F877, and PIC18F452.
+* 64kB Program Flash, 16-bit instruction width
+* 3.9kB Data RAM
+* 8-bit CPU, 10 MIPS @ 40 Mhz, single cycle 8x8 multiply
+* 512kB PRG SST39SF040 Flash ROM, 32kB PRG pages
+* 32kB PRG RAM, 8kB pages
+* 32kB CHR RAM, 8kB pages, fixed 4-screen nametable
 
-[![Mesen](https://github.com/nesdev-org/MesenCE/actions/workflows/build.yml/badge.svg)](https://github.com/nesdev-org/MesenCE/actions/workflows/build.yml?query=branch%3Amaster)
+## Firmware
 
-* [Windows](https://nightly.link/nesdev-org/MesenCE/workflows/build/master/Mesen%20%28Windows%20-%20net10.0%20-%20AoT%29.zip)
-  * Windows 7 or higher is required. Windows 7 users must use SP1 and have all updates installed.
-* [Linux x64](https://nightly.link/nesdev-org/MesenCE/workflows/build/master/Mesen%20%28Linux%20-%20ubuntu-22.04%20-%20clang_aot%29.zip)  (requires **SDL2**)  
-* [Linux ARM64](https://nightly.link/nesdev-org/MesenCE/workflows/build/master/Mesen%20%28Linux%20-%20ubuntu-22.04-arm%20-%20clang_aot%29.zip)  (requires **SDL2**)  
-* [macOS - Intel](https://nightly.link/nesdev-org/MesenCE/workflows/build/master/Mesen%20%28macOS%20-%20macos-15-intel%20-%20clang_aot%29.zip)  (requires **SDL2**)  
-* [macOS - Apple Silicon](https://nightly.link/nesdev-org/MesenCE/workflows/build/master/Mesen%20%28macOS%20-%20macos-15%20-%20clang_aot%29.zip)  (requires **SDL2**)  
+Firmware must be provided in Intel Hex format, with the same name as the .NES file.  Updated firmware may be found in a different repo TBD.  The squeedo folder includes a historical build.
 
-#### <ins>Notes</ins> ####
+## Disclosure
 
-* Other builds are also available in the [Actions](https://github.com/nesdev-org/MesenCE/actions/workflows/build.yml?query=branch%3Amaster) tab.
-* **macOS**: Builds are self-signed and will require approval via Gatekeeper before they are able to be run.  
-* **SteamOS**: See [SteamOS.md](SteamOS.md)  
+LLM-generated code is present in this build.  Token costs were roughly $10 to write it (mostly MiMo V2.5 Pro), and $13 to debug it (mostly Deepseek V4 Pro), with the initial version developed over 4 days.  My additions are provided under MIT License.
 
 ## Compiling
 
 See [COMPILING.md](COMPILING.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 

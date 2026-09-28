@@ -169,7 +169,7 @@ All registers are readable and writable unless noted.
 
 | Register | Name | Write | Read |
 |----------|------|-------|------|
-| $5003    | NMI Acknowledge | Any write — **planned but not implemented** (no NMI line connected to PIC). Intended to sync mapper to NES vblank for display-list-style CHR banking. | — |
+| $5003    | NMI Acknowledge | Any write — Intended to sync mapper to NES vblank for display-list-style CHR banking. | — |
 | $5004    | IRQ Acknowledge | Any write clears NES /IRQ line | — |
 | $5005    | IRQ Source Select | D0: PPU IRQ enable, D1: CPU IRQ enable, D2: UART RX IRQ, D3: UART TX IRQ, D4: Auto CHR page cycling | D0: PPU IRQ active, D1: CPU IRQ active, D2: UART RX ready, D3: UART TX ready |
 | $5006    | CPU Cycle Count Lo | D0–D7: Low byte of CPU-cycle IRQ timer | — |

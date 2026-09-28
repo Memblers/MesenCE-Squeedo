@@ -128,44 +128,44 @@ namespace Pic18StatusBits
 	constexpr uint8_t N = 0x10;   // Negative
 }
 
-// INTCON register bits
+// INTCON register bits (bit masks)
 namespace Pic18IntconBits
 {
-	constexpr uint8_t RBIF = 0x00;
-	constexpr uint8_t INT0IF = 0x01;
-	constexpr uint8_t TMR0IF = 0x02;
-	constexpr uint8_t RBIE = 0x03;
-	constexpr uint8_t INT0IE = 0x04;
-	constexpr uint8_t TMR0IE = 0x05;
-	constexpr uint8_t PEIE = 0x06;
-	constexpr uint8_t GIE = 0x07;
+	constexpr uint8_t RBIF = 0x01;     // bit 0
+	constexpr uint8_t INT0IF = 0x02;   // bit 1
+	constexpr uint8_t TMR0IF = 0x04;   // bit 2
+	constexpr uint8_t RBIE = 0x08;     // bit 3
+	constexpr uint8_t INT0IE = 0x10;   // bit 4
+	constexpr uint8_t TMR0IE = 0x20;   // bit 5
+	constexpr uint8_t PEIE = 0x40;     // bit 6
+	constexpr uint8_t GIE = 0x80;      // bit 7
 
 	// INTCON2 bits
-	constexpr uint8_t RBIP = 0x00;
-	constexpr uint8_t TMR0IP = 0x02;
-	constexpr uint8_t INTEDG2 = 0x04;
-	constexpr uint8_t INTEDG1 = 0x05;
-	constexpr uint8_t INTEDG0 = 0x06;
-	constexpr uint8_t NOT_RBPU = 0x07;
+	constexpr uint8_t RBIP = 0x01;     // bit 0
+	constexpr uint8_t TMR0IP = 0x04;   // bit 2
+	constexpr uint8_t INTEDG2 = 0x10;  // bit 4
+	constexpr uint8_t INTEDG1 = 0x20;  // bit 5
+	constexpr uint8_t INTEDG0 = 0x40;  // bit 6
+	constexpr uint8_t NOT_RBPU = 0x80; // bit 7
 
 	// INTCON3 bits
-	constexpr uint8_t INT1IF = 0x00;
-	constexpr uint8_t INT2IF = 0x01;
-	constexpr uint8_t INT1IE = 0x03;
-	constexpr uint8_t INT2IE = 0x04;
-	constexpr uint8_t INT1IP = 0x06;
-	constexpr uint8_t INT2IP = 0x07;
+	constexpr uint8_t INT1IF = 0x01;   // bit 0
+	constexpr uint8_t INT2IF = 0x02;   // bit 1
+	constexpr uint8_t INT1IE = 0x08;   // bit 3
+	constexpr uint8_t INT2IE = 0x10;   // bit 4
+	constexpr uint8_t INT1IP = 0x40;   // bit 6
+	constexpr uint8_t INT2IP = 0x80;   // bit 7
 }
 
-// RCON register bits (for interrupt priority)
+// RCON register bits (bit masks)
 namespace Pic18RconBits
 {
-	constexpr uint8_t BOR = 0x00;
-	constexpr uint8_t POR = 0x01;
-	constexpr uint8_t PD = 0x02;
-	constexpr uint8_t TO = 0x03;
-	constexpr uint8_t RI = 0x04;
-	constexpr uint8_t IPEN = 0x07;
+	constexpr uint8_t BOR = 0x01;    // bit 0
+	constexpr uint8_t POR = 0x02;    // bit 1
+	constexpr uint8_t PD = 0x04;     // bit 2
+	constexpr uint8_t TO = 0x08;     // bit 3
+	constexpr uint8_t RI = 0x10;     // bit 4
+	constexpr uint8_t IPEN = 0x80;   // bit 7
 }
 
 // STKPTR bits
@@ -208,30 +208,30 @@ namespace Pic18T3conBits
 	constexpr uint8_t T3CCP2 = 0x06;
 }
 
-// PIE1/PIR1/IPR1 bits
+// PIE1/PIR1/IPR1 bits (bit masks)
 namespace Pic18Pir1Bits
 {
-	constexpr uint8_t TMR1IF = 0x00;
-	constexpr uint8_t TMR2IF = 0x01;
-	constexpr uint8_t CCP1IF = 0x02;
-	constexpr uint8_t SSPIF = 0x03;
-	constexpr uint8_t TXIF = 0x04;
-	constexpr uint8_t RCIF = 0x05;
-	constexpr uint8_t ADIF = 0x06;
-	constexpr uint8_t PSPIF = 0x07;
+	constexpr uint8_t TMR1IF = 0x01; // bit 0
+	constexpr uint8_t TMR2IF = 0x02; // bit 1
+	constexpr uint8_t CCP1IF = 0x04; // bit 2
+	constexpr uint8_t SSPIF = 0x08;  // bit 3
+	constexpr uint8_t TXIF = 0x10;   // bit 4
+	constexpr uint8_t RCIF = 0x20;   // bit 5
+	constexpr uint8_t ADIF = 0x40;   // bit 6
+	constexpr uint8_t PSPIF = 0x80;  // bit 7
 }
 
-// PIE2/PIR2/IPR2 bits
+// PIE2/PIR2/IPR2 bits (bit masks)
 namespace Pic18Pir2Bits
 {
-	constexpr uint8_t CCP2IF = 0x00;
-	constexpr uint8_t TMR3IF = 0x01;
-	constexpr uint8_t HLVDIF = 0x02;
-	constexpr uint8_t BCLIF = 0x03;
-	constexpr uint8_t EEIF = 0x04;
-	constexpr uint8_t USBIF = 0x05;
-	constexpr uint8_t CMIF = 0x06;
-	constexpr uint8_t OSCFIF = 0x07;
+	constexpr uint8_t CCP2IF = 0x01;  // bit 0
+	constexpr uint8_t TMR3IF = 0x02;  // bit 1
+	constexpr uint8_t HLVDIF = 0x04;  // bit 2
+	constexpr uint8_t BCLIF = 0x08;   // bit 3
+	constexpr uint8_t EEIF = 0x10;    // bit 4
+	constexpr uint8_t USBIF = 0x20;   // bit 5
+	constexpr uint8_t CMIF = 0x40;    // bit 6
+	constexpr uint8_t OSCFIF = 0x80;  // bit 7
 }
 
 // RCSTA bits

@@ -125,6 +125,11 @@ namespace Mesen.Config
 		[ObservableProperty][MinMax(1, 100)] public partial Int32 StereoCombFilterDelay { get; set; } = 5;
 		[ObservableProperty][MinMax(1, 200)] public partial Int32 StereoCombFilterStrength { get; set; } = 100;
 
+		//Serial Port (Squeedo mapper UART bridge)
+		[ObservableProperty] public partial bool SerialPortEnabled { get; set; } = false;
+		[ObservableProperty] public partial string SerialPortName { get; set; } = "";
+		[ObservableProperty][MinMax(1200, 921600)] public partial UInt32 SerialBaudRate { get; set; } = 9600;
+
 		//Misc
 		[ObservableProperty] public partial bool BreakOnCrash { get; set; } = false;
 
@@ -240,6 +245,10 @@ namespace Mesen.Config
 				StereoPanningAngle = StereoPanningAngle,
 				StereoCombFilterDelay = StereoCombFilterDelay,
 				StereoCombFilterStrength = StereoCombFilterStrength,
+
+				SerialPortEnabled = SerialPortEnabled,
+				SerialPortName = SerialPortName,
+				SerialBaudRate = SerialBaudRate,
 
 				BreakOnCrash = BreakOnCrash,
 
@@ -386,6 +395,11 @@ namespace Mesen.Config
 		public Int32 StereoPanningAngle;
 		public Int32 StereoCombFilterDelay;
 		public Int32 StereoCombFilterStrength;
+
+		//Serial Port (Squeedo mapper UART bridge)
+		[MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string SerialPortName;
+		public UInt32 SerialBaudRate;
+		[MarshalAs(UnmanagedType.I1)] public bool SerialPortEnabled;
 	}
 
 	public enum StereoFilter
