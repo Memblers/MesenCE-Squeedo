@@ -46,9 +46,9 @@ private:
 protected:
 	uint16_t GetPrgPageSize() override { return 0x4000; }  // 16KB pages (2 per 32KB bank)
 	uint16_t GetChrPageSize() override { return 0x2000; }  // 8KB pages
-	uint32_t GetSaveRamSize() override { return 0x8000; }  // 32KB (4 × 8KB pages)
-	uint32_t GetSaveRamPageSize() override { return 0x2000; }
-	uint32_t GetWorkRamSize() override { return 0; }
+	uint32_t GetSaveRamSize() override { return 0; }
+	uint32_t GetWorkRamSize() override { return 0x8000; }  // 32KB (4 × 8KB pages)
+	uint32_t GetWorkRamPageSize() override { return 0x2000; }
 	uint32_t GetChrRamSize() override { return 0x8000; }   // 32KB (4 × 8KB pages)
 	uint16_t RegisterStartAddress() override { return 0x5000; }
 	uint16_t RegisterEndAddress() override { return 0x5FFF; }
@@ -188,7 +188,7 @@ protected:
 		if(portB != _lastPortB) {
 			_lastPortB = portB;
 			uint32_t offset = ((portB >> 6) & 0x03) * 0x2000;
-			SetCpuMemoryMapping(0x6000, 0x7FFF, PrgMemoryType::SaveRam, offset, MemoryAccessType::ReadWrite);
+			SetCpuMemoryMapping(0x6000, 0x7FFF, PrgMemoryType::WorkRam, offset, MemoryAccessType::ReadWrite);
 		}
 
 		// CHR bank: PIC PortC bits 1-2 → 62256 A13-A14 (gated for pattern tables)
