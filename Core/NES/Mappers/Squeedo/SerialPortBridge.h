@@ -7,11 +7,12 @@
 
 class Pic18Peripherals;
 
-// Bridges a host serial port to the PIC18 UART inside the Squeedo mapper.
+// Bridges a host serial port to emulated serial peripherals.
+// Shared as a global singleton — used by both the Squeedo mapper UART
+// and the NesSerialAdapter controller device.
 //
 // Threading model:
-//   - Emulation thread: calls SendByte() when PIC writes TXREG,
-//                       calls PollReceivedBytes() each NES cycle to feed RX
+//   - Emulation thread: calls SendByte() for TX, DrainRxBytes()/PollReceivedBytes() for RX
 //   - Background thread: reads from serial port → RX queue,
 //                        drains TX queue → writes to serial port
 class SerialPortBridge
@@ -25,9 +26,13 @@ private:
 	deque<uint8_t> _txQueue;
 	SimpleLock _txLock;
 
-	// RX queue: serial port → emulation thread
+	// RX queue: serial port → PIC18 (Squeedo UART)
 	deque<uint8_t> _rxQueue;
 	SimpleLock _rxLock;
+
+	// Adapter RX queue: serial port → NesSerialAdapter (separate from PIC queue)
+	deque<uint8_t> _adapterRxQueue;
+	SimpleLock _adapterRxLock;
 
 	// Error reporting (log once, not spammy)
 	std::atomic<bool> _portError = false;
@@ -61,15 +66,26 @@ private:
 				}
 			}
 
-			// Read from serial port → RX queue
-			// Use a short timeout so we loop frequently for TX
-			int n = _port.Read(readBuf, sizeof(readBuf), 10);
+			// Non-blocking read from serial port → RX queue
+			int n = _port.Read(readBuf, sizeof(readBuf), 0);
 			if(n > 0) {
-				LockHandler lock = _rxLock.AcquireSafe();
-				for(int i = 0; i < n; i++) {
-					_rxQueue.push_back(readBuf[i]);
+				// Push to both RX queues (PIC and adapter)
+				{
+					LockHandler lock = _rxLock.AcquireSafe();
+					for(int i = 0; i < n; i++) {
+						_rxQueue.push_back(readBuf[i]);
+					}
+				}
+				{
+					LockHandler lock = _adapterRxLock.AcquireSafe();
+					for(int i = 0; i < n; i++) {
+						_adapterRxQueue.push_back(readBuf[i]);
+					}
 				}
 				_rxBytes.fetch_add(n, std::memory_order_relaxed);
+			} else {
+				// No data — yield briefly to avoid busy-spin
+				std::this_thread::sleep_for(std::chrono::microseconds(100));
 			}
 		}
 	}
@@ -82,12 +98,23 @@ public:
 	SerialPortBridge(const SerialPortBridge&) = delete;
 	SerialPortBridge& operator=(const SerialPortBridge&) = delete;
 
+	// Global shared instance — prevents double-open when both Squeedo mapper
+	// and NesControlManager want the same COM port.
+	static inline SerialPortBridge* s_instance = nullptr;
+
+	static SerialPortBridge* GetInstance() { return s_instance; }
+
 	bool Start(const string& portName, uint32_t baudRate)
 	{
+		// If already open on the same port, just reuse
+		if(s_instance && s_instance->IsRunning()) {
+			MessageManager::Log("[SerialPortBridge] Already open, reusing existing connection");
+			return true;
+		}
 		Stop();
 
 		if(!_port.Open(portName, baudRate)) {
-			MessageManager::Log("[Squeedo] Failed to open serial port: " + portName);
+			MessageManager::Log("[SerialPortBridge] Failed to open serial port: " + portName);
 			return false;
 		}
 
@@ -97,13 +124,15 @@ public:
 		_rxBytes.store(0, std::memory_order_relaxed);
 		_lastStatusTime = std::chrono::steady_clock::now();
 		_thread = std::thread(&SerialPortBridge::ThreadFunc, this);
+		s_instance = this;
 
-		MessageManager::Log("[Squeedo] Serial port opened: " + portName + " @ " + std::to_string(baudRate));
+		MessageManager::Log("[SerialPortBridge] Serial port opened: " + portName + " @ " + std::to_string(baudRate));
 		return true;
 	}
 
 	void Stop()
 	{
+		if(s_instance == this) s_instance = nullptr;
 		_running.store(false, std::memory_order_relaxed);
 		if(_thread.joinable()) {
 			_thread.join();
@@ -142,6 +171,18 @@ public:
 	// Called by emulation thread each NES cycle to drain RX queue into PIC
 	// Returns number of bytes fed to the PIC
 	int PollReceivedBytes(Pic18Peripherals* peripherals);
+
+	// Drain received bytes from adapter queue (separate from PIC queue)
+	int DrainRxBytes(uint8_t* buf, int maxLen)
+	{
+		int count = 0;
+		LockHandler lock = _adapterRxLock.AcquireSafe();
+		while(!_adapterRxQueue.empty() && count < maxLen) {
+			buf[count++] = _adapterRxQueue.front();
+			_adapterRxQueue.pop_front();
+		}
+		return count;
+	}
 
 	// Called by emulation thread to periodically log status
 	void PollStatusLog()

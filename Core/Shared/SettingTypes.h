@@ -228,6 +228,7 @@ enum class ControllerType
 	PowerPadSideB,
 	SuborMouse,
 	VirtualBoyController,
+	NesSerialAdapter,
 
 	//NES/Famicon expansion devices
 	FourScore,
@@ -763,10 +764,14 @@ struct NesConfig
 	int32_t StereoCombFilterDelay = 0;
 	int32_t StereoCombFilterStrength = 0;
 
-	// Serial port (Squeedo mapper UART bridge)
+	// Serial port (shared: Squeedo mapper UART bridge + NES serial adapter)
 	char SerialPortName[256] = {};
 	uint32_t SerialBaudRate = 9600;
 	bool SerialPortEnabled = false;
+
+	// NES serial adapter (controller port serial)
+	uint32_t SerialAdapterBaudRate = 9600;
+	uint8_t SerialAdapterStopBits = 1;
 };
 
 enum class SmsRevision

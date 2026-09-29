@@ -581,6 +581,7 @@
     <ClInclude Include="NES\RomData.h" />
     <ClInclude Include="NES\APU\SquareChannel.h" />
     <ClInclude Include="NES\Input\NesController.h" />
+    <ClInclude Include="NES\Input\NesSerialAdapter.h" />
     <ClInclude Include="NES\APU\TriangleChannel.h" />
     <ClInclude Include="Shared\TimingInfo.h" />
     <ClInclude Include="Shared\Video\RotateFilter.h" />

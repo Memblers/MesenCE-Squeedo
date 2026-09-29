@@ -38,6 +38,7 @@
 #include "NES/Input/AsciiTurboFile.h"
 #include "NES/Input/BattleBox.h"
 #include "NES/Input/VirtualBoyController.h"
+#include "NES/Input/NesSerialAdapter.h"
 #include "NES/Input/FcnsController.h"
 #include "NES/Epsm.h"
 
@@ -48,6 +49,9 @@ NesControlManager::NesControlManager(NesConsole* console) : BaseControlManager(c
 
 NesControlManager::~NesControlManager()
 {
+	if(_serialBridge) {
+		_serialBridge->Stop();
+	}
 }
 
 shared_ptr<BaseControlDevice> NesControlManager::CreateControllerDevice(ControllerType type, uint8_t port)
@@ -99,6 +103,7 @@ shared_ptr<BaseControlDevice> NesControlManager::CreateControllerDevice(Controll
 		case ControllerType::SnesMouse: device.reset(new SnesMouse(_emu, port, keys)); break;
 		case ControllerType::SuborMouse: device.reset(new SuborMouse(_emu, port, keys)); break;
 		case ControllerType::VirtualBoyController: device.reset(new VirtualBoyController(_emu, port, keys)); break;
+		case ControllerType::NesSerialAdapter: device.reset(new NesSerialAdapter(_emu, port, keys)); break;
 
 		//Exp port devices
 		case ControllerType::FamicomZapper: device.reset(new Zapper(_console, type, BaseControlDevice::ExpDevicePort, keys)); break;
@@ -161,12 +166,32 @@ void NesControlManager::UpdateControlDevices()
 
 	SaveBattery();
 
+	// Reuse existing bridge if Squeedo mapper already opened one
+	SerialPortBridge* existing = SerialPortBridge::GetInstance();
+
 	ClearDevices();
 
 	for(int i = 0; i < 2; i++) {
 		shared_ptr<BaseControlDevice> device = CreateControllerDevice(i == 0 ? cfg.Port1.Type : cfg.Port2.Type, i);
 		if(device) {
 			RegisterControlDevice(device);
+			// Wire serial adapter to serial bridge
+			if(cfg.SerialPortEnabled && cfg.SerialPortName[0] != '\0') {
+				NesSerialAdapter* adapter = dynamic_cast<NesSerialAdapter*>(device.get());
+				if(adapter) {
+					if(existing) {
+						// Squeedo mapper already opened the bridge — reuse it
+						adapter->SetBridge(existing);
+					} else if(!_serialBridge) {
+						// No existing bridge — create one
+						_serialBridge.reset(new SerialPortBridge());
+						_serialBridge->Start(cfg.SerialPortName, cfg.SerialBaudRate);
+						adapter->SetBridge(_serialBridge.get());
+					}
+					adapter->SetBaudRate(cfg.SerialAdapterBaudRate);
+					adapter->SetStopBits(cfg.SerialAdapterStopBits);
+				}
+			}
 		}
 	}
 

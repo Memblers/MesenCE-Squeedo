@@ -2,6 +2,7 @@
 
 #include "pch.h"
 #include "NES/INesMemoryHandler.h"
+#include "NES/Mappers/Squeedo/SerialPortBridge.h"
 #include "Shared/BaseControlManager.h"
 #include "Shared/SettingTypes.h"
 #include "Utilities/SimpleLock.h"
@@ -23,6 +24,8 @@ private:
 	uint8_t _writeValue = 0;
 	uint8_t _writePending = 0;
 	uint16_t _prevReadAddr = 0;
+
+	unique_ptr<SerialPortBridge> _serialBridge;
 
 	uint8_t ReadDevice(shared_ptr<BaseControlDevice>& device, uint16_t addr);
 

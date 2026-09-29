@@ -1,8 +1,6 @@
 #include "pch.h"
 #include "NES/Mappers/Squeedo/Pic18Cpu.h"
 #include "NES/Mappers/Squeedo/Pic18Peripherals.h"
-#include "Shared/MessageManager.h"
-#include "Utilities/HexUtilities.h"
 
 Pic18Cpu::Pic18Cpu(Pic18CpuState& state) : _state(state)
 {
@@ -127,25 +125,6 @@ bool Pic18Cpu::CheckInterrupts()
 	uint8_t pie2 = _state.Data[Pic18Sfr::PIE2 & 0xFFF];
 	uint8_t ipr1 = _state.Data[Pic18Sfr::IPR1 & 0xFFF];
 	uint8_t intcon3 = _state.Data[Pic18Sfr::INTCON3 & 0xFFF];
-
-	// One-shot diagnostic: dump state when UART RX interrupt flag is pending
-	static bool _rxDiagFired = false;
-	if(!_rxDiagFired && (pir1 & Pic18Pir1Bits::RCIF)) {
-		_rxDiagFired = true;
-		MessageManager::Log("[Squeedo] IRQ DIAG: INTCON=0x" + HexUtilities::ToHex(_state.INTCON)
-			+ " RCON=0x" + HexUtilities::ToHex(_state.RCON)
-			+ " PIR1=0x" + HexUtilities::ToHex(pir1)
-			+ " PIE1=0x" + HexUtilities::ToHex(pie1)
-			+ " IPR1=0x" + HexUtilities::ToHex(ipr1)
-			+ " PIR2=0x" + HexUtilities::ToHex(pir2)
-			+ " PIE2=0x" + HexUtilities::ToHex(pie2)
-			+ " INTCON3=0x" + HexUtilities::ToHex(intcon3)
-			+ " PC=0x" + HexUtilities::ToHex((uint16_t)_state.PC));
-		MessageManager::Log("[Squeedo] IRQ DIAG: GIE=" + std::to_string(gie)
-			+ " PEIE=" + std::to_string(peie)
-			+ " IPEN=" + std::to_string(priorityEnabled)
-			+ " RCIF&RCIE=" + std::to_string(!!(pir1 & pie1 & Pic18Pir1Bits::RCIF)));
-	}
 
 	bool hasHighPriority = false;
 	bool hasLowPriority = false;

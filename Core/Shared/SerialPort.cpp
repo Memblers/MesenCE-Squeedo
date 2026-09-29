@@ -164,11 +164,11 @@ bool SerialPort::Open(const string& portName, uint32_t baudRate)
 		return false;
 	}
 
-	// Set timeouts: ReadFile will return after ~100ms if no data arrives
+	// Set timeouts: non-blocking reads (return immediately with whatever is available)
 	WinCOMMTIMEOUTS timeouts = {};
-	timeouts.ReadIntervalTimeout = _MAXDWORD;
-	timeouts.ReadTotalTimeoutMultiplier = _MAXDWORD;
-	timeouts.ReadTotalTimeoutConstant = 100;
+	timeouts.ReadIntervalTimeout = _MAXDWORD;         // Return immediately between bytes
+	timeouts.ReadTotalTimeoutMultiplier = 0;
+	timeouts.ReadTotalTimeoutConstant = 0;             // No overall timeout — instant return
 	timeouts.WriteTotalTimeoutMultiplier = 0;
 	timeouts.WriteTotalTimeoutConstant = 0;
 	SetCommTimeouts(h, &timeouts);
