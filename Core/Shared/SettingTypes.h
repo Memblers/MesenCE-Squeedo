@@ -772,6 +772,7 @@ struct NesConfig
 	// NES serial adapter (controller port serial)
 	uint32_t SerialAdapterBaudRate = 9600;
 	uint8_t SerialAdapterStopBits = 1;
+	bool SerialBridgeSqueedo = true;
 };
 
 enum class SmsRevision

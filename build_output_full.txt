@@ -1,0 +1,23 @@
+﻿
+  Utilities.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\Utilities.lib
+  Core.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\Core.lib
+  Windows.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\Windows.lib
+  SevenZip.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\SevenZip.lib
+  Lua.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\Lua.lib
+  ConfigApiWrapper.cpp
+  DebugApiWrapper.cpp
+  EmuApiWrapper.cpp
+  HistoryApiWrapper.cpp
+  InputApiWrapper.cpp
+  NetplayApiWrapper.cpp
+  RecordApiWrapper.cpp
+  TestApiWrapper.cpp
+     Creating library c:\proj\c\MesenCE-Squeedo\\bin\win-x64\Release\MesenCore.lib and object c:\proj\c\MesenCE-Squeedo\\bin\win-x64\Release\MesenCore.exp
+  Generating code
+  Previous IPDB and IOBJ mismatch, fall back to full compilation.
+  All 47268 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+  InteropDLL.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\MesenCore.dll
+  PGOHelper.vcxproj -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\PGOHelper.exe
+c:\proj\c\MesenCE-Squeedo\UI\Views/NesInputConfigView.axaml(193,8,193,8): Avalonia warning AVLN5001: 'TextBox.Watermark' is obsolete: Use PlaceholderText instead. [c:\proj\c\MesenCE-Squeedo\UI\UI.csproj]
+  UI -> c:\proj\c\MesenCE-Squeedo\bin\win-x64\Release\Mesen.dll

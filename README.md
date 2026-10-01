@@ -11,7 +11,7 @@ This fork of Mesen Community Edition adds support for the Squeedo mapper, a flas
 PIC18F4620 is an MCU released in 2004, and was the best available with this parallel port feature in a DIP-40 package.  During development, other parts considered for cost reasons were PIC16F877, and PIC18F452.
 * 64kB Program Flash, 16-bit instruction width
 * 3.9kB Data RAM
-* 8-bit CPU, 10 MIPS @ 40 Mhz, single cycle 8x8 multiply
+* 8-bit PIC18F CPU, 10 MIPS @ 40 Mhz, single cycle 8x8 multiply
 * 512kB PRG SST39SF040 Flash ROM, 32kB PRG pages
 * 32kB PRG RAM, 8kB pages
 * 32kB CHR RAM, 8kB pages, fixed 4-screen nametable

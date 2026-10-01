@@ -2031,6 +2031,7 @@ E
 			<Value ID="SnesMouse">SNES Mouse</Value>
 			<Value ID="SuborMouse">Subor Mouse</Value>
 			<Value ID="VbController">Virtual Boy Controller</Value>
+			<Value ID="NesSerialAdapter">Async Serial Adapter</Value>
 
 			<Value ID="FourScore">Four Score (NES)</Value>
 			<Value ID="FamicomZapper">Zapper (Famicom)</Value>

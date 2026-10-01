@@ -187,18 +187,16 @@
 			</c:OptionSection>
 			<c:OptionSection Header="Serial Port">
 				<StackPanel Spacing="8">
-					<CheckBox IsChecked="{Binding Config.SerialPortEnabled}" Content="Enable serial port bridge (connects emulated serial to a host COM port)" />
-					<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto" IsEnabled="{Binding Config.SerialPortEnabled}">
+					<CheckBox IsChecked="{Binding Config.SerialPortEnabled}" Content="Enable host COM port connection" />
+					<Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto" IsEnabled="{Binding Config.SerialPortEnabled}">
 						<TextBlock Grid.Row="0" Text="Port name" VerticalAlignment="Center" Margin="0 0 5 0" />
 						<TextBox Grid.Row="0" Grid.Column="1" Text="{Binding Config.SerialPortName}" PlaceholderText="e.g. COM3 or /dev/ttyUSB0" MaxWidth="250" HorizontalAlignment="Left" />
-						<TextBlock Grid.Row="1" Text="Host baud rate" VerticalAlignment="Center" Margin="0 5 5 0" ToolTip.Tip="Baud rate for the host serial port connection (used by Squeedo UART bridge)" />
-						<c:MesenNumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding Config.SerialBaudRate}" Minimum="1200" Maximum="921600" Margin="0 5 0 0" />
-						<TextBlock Grid.Row="2" Text="NES baud rate" VerticalAlignment="Center" Margin="0 5 5 0" ToolTip.Tip="Serial baud rate for the NES serial adapter device (controller port)" />
-						<c:MesenNumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Config.SerialAdapterBaudRate}" Minimum="300" Maximum="115200" Margin="0 5 0 0" />
-						<TextBlock Grid.Row="3" Text="Stop bits" VerticalAlignment="Center" Margin="0 5 5 0" />
-						<c:MesenNumericUpDown Grid.Row="3" Grid.Column="1" Value="{Binding Config.SerialAdapterStopBits}" Minimum="1" Maximum="2" Margin="0 5 0 0" />
+						<TextBlock Grid.Row="1" Text="Baud rate" VerticalAlignment="Center" Margin="0 5 5 0" ToolTip.Tip="Baud rate for the Async Serial Adapter (controller port)" />
+						<c:MesenNumericUpDown Grid.Row="1" Grid.Column="1" Value="{Binding Config.SerialAdapterBaudRate}" Minimum="300" Maximum="115200" Margin="0 5 0 0" />
+						<TextBlock Grid.Row="2" Text="Stop bits" VerticalAlignment="Center" Margin="0 5 5 0" />
+						<c:MesenNumericUpDown Grid.Row="2" Grid.Column="1" Value="{Binding Config.SerialAdapterStopBits}" Minimum="1" Maximum="2" Margin="0 5 0 0" />
 					</Grid>
-					<TextBlock TextWrapping="Wrap" FontSize="11" Foreground="{DynamicResource DisabledForeground}" Text="For Squeedo: connects PIC18 UART to a host serial port. For NesSerialAdapter (Port 2): bit-banged async serial via controller port. Both use the same host COM port connection." />
+					<CheckBox IsChecked="{Binding Config.SerialBridgeSqueedo}" Content="Connect to Squeedo PIC UART" IsEnabled="{Binding Config.SerialPortEnabled}" />
 				</StackPanel>
 			</c:OptionSection>
 		</StackPanel>

@@ -133,6 +133,7 @@ namespace Mesen.Config
 		//NES serial adapter (controller port serial)
 		[ObservableProperty][MinMax(300, 115200)] public partial UInt32 SerialAdapterBaudRate { get; set; } = 9600;
 		[ObservableProperty][MinMax(1, 2)] public partial Byte SerialAdapterStopBits { get; set; } = 1;
+		[ObservableProperty] public partial bool SerialBridgeSqueedo { get; set; } = true;
 
 		//Misc
 		[ObservableProperty] public partial bool BreakOnCrash { get; set; } = false;
@@ -255,6 +256,7 @@ namespace Mesen.Config
 				SerialBaudRate = SerialBaudRate,
 				SerialAdapterBaudRate = SerialAdapterBaudRate,
 				SerialAdapterStopBits = SerialAdapterStopBits,
+				SerialBridgeSqueedo = SerialBridgeSqueedo,
 
 				BreakOnCrash = BreakOnCrash,
 
@@ -410,6 +412,7 @@ namespace Mesen.Config
 		// NES serial adapter
 		public UInt32 SerialAdapterBaudRate;
 		public Byte SerialAdapterStopBits;
+		[MarshalAs(UnmanagedType.I1)] public bool SerialBridgeSqueedo;
 	}
 
 	public enum StereoFilter

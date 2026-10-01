@@ -66,9 +66,17 @@ protected:
 		// No-op — all initialization done in InitMapper(RomData&)
 	}
 
+	static constexpr uint32_t SQUEEDO_FLASH_SIZE = 0x80000;  // SST39SF040 = 512KB
+
 	void InitMapper(RomData& romData) override
 	{
 		SetMirroringType(MirroringType::FourScreens);
+
+		// The SST39SF040 flash chip is always 512KB — reject undersized ROMs
+		if(_prgSize < SQUEEDO_FLASH_SIZE) {
+			MessageManager::Log("[Squeedo] PRG ROM is " + std::to_string(_prgSize / 1024) + "KB, expected 512KB");
+			throw std::runtime_error("Squeedo: PRG ROM must be 512KB");
+		}
 
 		// Flash chip emulation (SST39SF040, 512KB)
 		_flash.reset(new FlashSST39SF040(_prgRom, _prgSize));
@@ -97,7 +105,9 @@ protected:
 		});
 
 		// Load PIC firmware from companion .hex file
-		LoadPicFirmware(romData);
+		if(!LoadPicFirmware(romData)) {
+			throw std::runtime_error("Squeedo: PIC firmware (.hex) not found");
+		}
 
 		// Reset PIC
 		_picCpu->Reset();
@@ -117,10 +127,9 @@ protected:
 		// Apply initial banking from PIC GPIO state (all zero after reset)
 		ApplyGpioBanking();
 
-		// Start serial port bridge if enabled in config
+		// Start serial port bridge if enabled in config and Squeedo connection is desired
 		const NesConfig& cfg = _console->GetNesConfig();
-		MessageManager::Log("[Squeedo] Serial config: enabled=" + std::to_string(cfg.SerialPortEnabled) + " port='" + cfg.SerialPortName + "' baud=" + std::to_string(cfg.SerialBaudRate));
-		if(cfg.SerialPortEnabled && cfg.SerialPortName[0] != '\0') {
+		if(cfg.SerialPortEnabled && cfg.SerialBridgeSqueedo && cfg.SerialPortName[0] != '\0') {
 			// Close any existing bridge from a previous ROM load
 			if(_sSerialBridge) {
 				_sSerialBridge->Stop();
@@ -144,7 +153,7 @@ protected:
 		SaveRom(_orgPrgRom);
 	}
 
-	void LoadPicFirmware(RomData& romData)
+	bool LoadPicFirmware(RomData& romData)
 	{
 		// Try to find companion .hex file
 		// 1. Same directory as the ROM
@@ -178,13 +187,13 @@ protected:
 				hexFile.ReadFile(hexData);
 				if(!hexData.empty()) {
 					bool ok = IntelHexParser::Parse(hexData, _picState.Program, sizeof(_picState.Program), 0);
-					// Report the load result so the memory viewer can be correlated
 					MessageManager::Log("[Squeedo] Loaded PIC firmware: " + hexPath + (ok ? "" : " (parse error)"));
-					return;
+					return true;
 				}
 			}
 		}
 		MessageManager::Log("[Squeedo] PIC firmware (.hex) not found for " + _romInfo.RomName);
+		return false;
 	}
 
 	void SetIrq(bool active)
