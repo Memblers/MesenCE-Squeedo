@@ -1,0 +1,26 @@
+<Window
+	xmlns="https://github.com/avaloniaui"
+	xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+	xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+	xmlns:c="using:Mesen.Controls"
+	xmlns:cfg="using:Mesen.Config"
+	xmlns:l="using:Mesen.Localization"
+	xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+	mc:Ignorable="d" d:DesignWidth="250" d:DesignHeight="120"
+	x:Class="Mesen.Windows.McpConfigWindow"
+	Width="300" Height="120"
+	x:DataType="cfg:McpConfig"
+	Title="{l:Translate wndTitle}"
+>
+	<DockPanel Margin="5">
+		<StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right">
+			<Button MinWidth="70" HorizontalContentAlignment="Center" Click="Ok_OnClick" Content="{l:Translate btnOK}" />
+			<Button MinWidth="70" HorizontalContentAlignment="Center" IsCancel="True" Click="Cancel_OnClick" Content="{l:Translate btnCancel}" />
+		</StackPanel>
+
+		<Grid ColumnDefinitions="Auto,1*" RowDefinitions="Auto">
+			<TextBlock Text="{l:Translate lblPort}" VerticalAlignment="Center" Margin="0,0,10,0" />
+			<c:MesenNumericTextBox Grid.Column="1" Value="{Binding Port}" />
+		</Grid>
+	</DockPanel>
+</Window>

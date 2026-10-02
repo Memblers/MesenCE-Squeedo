@@ -12,8 +12,7 @@ using Mesen.Controls;
 using Mesen.Debugger.Utilities;
 using Mesen.Debugger.Windows;
 using Mesen.Interop;
-using Mesen.Localization;
-using Mesen.Utilities;
+using Mesen.Localization;	using Mesen.Mcp;using Mesen.Utilities;
 using Mesen.ViewModels;
 using Mesen.Views;
 using System;
@@ -181,6 +180,7 @@ namespace Mesen.Windows
 			}
 
 			_timerBackgroundFlag.Stop();
+			Task.Run(() => MesenMcpServer.Instance.StopAsync()).Wait(TimeSpan.FromSeconds(3));
 			EmuApi.Stop();
 			_listener?.Dispose();
 			EmuApi.Release();
@@ -292,6 +292,15 @@ namespace Mesen.Windows
 					cmdLine.LoadFiles();
 					cmdLine.OnAfterInit(this);
 
+					if(cmdLine.McpEnabled || ConfigManager.Config.Mcp.Enabled) {
+						int port = cmdLine.McpPort ?? (int)ConfigManager.Config.Mcp.Port;
+						_ = MesenMcpServer.Instance.StartAsync(port);
+						ConfigManager.Config.Mcp.Enabled = true;
+						if(cmdLine.McpPort.HasValue) {
+							ConfigManager.Config.Mcp.Port = (uint)cmdLine.McpPort.Value;
+						}
+					}
+
 					if(ConfigManager.Config.Preferences.AutomaticallyCheckForUpdates) {
 						_model.MainMenu.CheckForUpdate(this, true);
 					}
@@ -321,6 +330,7 @@ namespace Mesen.Windows
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
 					CheatCodes.ApplyCheats();
+					MesenMcpServer.Instance.OnRomLoaded();
 					RomInfo romInfo = EmuApi.GetRomInfo();
 
 					Dispatcher.UIThread.Post(() => {

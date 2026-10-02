@@ -27,6 +27,8 @@ public class CommandLineHelper
 	public bool NoInput { get; private set; }
 	public bool Fullscreen { get; private set; }
 	public bool LoadLastSessionRequested { get; private set; }
+	public bool McpEnabled { get; private set; }
+	public int? McpPort { get; private set; } = null;
 	public string? MovieToRecord { get; private set; } = null;
 	public int TestRunnerTimeout { get; private set; } = 100;
 	public List<string> LuaScriptsToLoad { get; private set; } = new();
@@ -64,8 +66,14 @@ public class CommandLineHelper
 					case "enablestdout": ConfigApi.SetEmulationFlag(EmulationFlags.OutputToStdout, true); break;
 					case "donotsavesettings": ConfigManager.DisableSaveSettings = true; break;
 					case "loadlastsession": LoadLastSessionRequested = true; break;
+					case "mcp": McpEnabled = true; break;
 					default:
-						if(switchArg.StartsWith("recordmovie=")) {
+						if(switchArg.StartsWith("mcp-port=")) {
+							string[] values = switchArg.Split('=');
+							if(values.Length > 1 && int.TryParse(values[1], out int mcpPort) && mcpPort >= 1 && mcpPort <= 65535) {
+								McpPort = mcpPort;
+							}
+						} else if(switchArg.StartsWith("recordmovie=")) {
 							string[] values = switchArg.Split('=');
 							if(values.Length <= 1) {
 								//invalid
@@ -185,6 +193,8 @@ public class CommandLineHelper
 --enableStdout - Writes the log window's content to stdout
 --fullscreen - Start in fullscreen mode
 --loadLastSession - Resumes the game in the state it was left in when it was last played.
+--mcp - Start the MCP server on launch (default port: 9100)
+--mcp-port=PORT - Set a custom port for the MCP server (1-65535)
 --recordMovie=""filename.mmo"" - Start recording a movie after the specified game is loaded.
 --testRunner [lua script] [rom file] - Runs a Lua script in headless mode (use emu.exit(...) to stop execution)
 ";

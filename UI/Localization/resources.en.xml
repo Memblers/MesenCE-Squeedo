@@ -1064,6 +1064,12 @@
 			<Control ID="btnCancel">Cancel</Control>
 		</Form>
 		
+		<Form ID="McpConfigWindow">
+			<Control ID="wndTitle">MCP Server - Configure Port</Control>
+			<Control ID="lblPort">Port:</Control>
+			<Control ID="btnOK">OK</Control>
+		</Form>
+		
 		<Form ID="CheckBoxWarning">
 			<Control ID="Hint">(not recommended)</Control>
 		</Form>
@@ -3649,6 +3655,11 @@ E
 			<Value ID="HdPackBuilder">HD Pack Builder</Value>
 			<Value ID="TakeScreenshot">Take Screenshot</Value>
 			<Value ID="SaveSpcFile">Save .SPC File</Value>
+
+			<Value ID="McpServer">MCP Server</Value>
+			<Value ID="McpServerStart">Start Server</Value>
+			<Value ID="McpServerStop">Stop Server</Value>
+			<Value ID="McpServerConfigurePort">Configure Port</Value>
 
 			<Value ID="OnlineHelp">Online Help</Value>
 			<Value ID="CommandLineHelp">Command-line options</Value>

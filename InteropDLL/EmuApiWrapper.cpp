@@ -1,4 +1,6 @@
 #include "Common.h"
+#include <sstream>
+#include <fstream>
 #include "Core/Shared/Emulator.h"
 #include "Core/Shared/EmuSettings.h"
 #include "Core/Shared/Video/VideoDecoder.h"
@@ -184,6 +186,20 @@ extern "C"
 	DllExport void __stdcall TakeScreenshot()
 	{
 		_emu->GetVideoDecoder()->TakeScreenshot();
+	}
+
+	DllExport int32_t __stdcall TakeScreenshotToFile(const char* filepath)
+	{
+		std::stringstream stream;
+		_emu->GetVideoDecoder()->TakeScreenshot(stream);
+		if(stream.tellp() > 0) {
+			std::ofstream file(filepath, std::ios::binary);
+			if(file) {
+				file << stream.rdbuf();
+				return (int32_t)stream.tellp();
+			}
+		}
+		return 0;
 	}
 
 	DllExport void __stdcall ProcessAudioPlayerAction(AudioPlayerActionParams p)

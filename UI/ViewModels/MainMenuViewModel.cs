@@ -864,16 +864,67 @@ namespace Mesen.ViewModels
 						ApplicationHelper.GetOrCreateUniqueWindow(wnd, () => new SaveSpcFileWindow());
 					}
 				},
-			};
-		}
 
-		private MainMenuAction GetVideoRecorderMenu(MainWindow wnd)
-		{
-			return new MainMenuAction() {
-				ActionType = ActionType.VideoRecorder,
+			new ContextMenuSeparator(),
+
+			new MainMenuAction() {
+				ActionType = ActionType.McpServer,
+				DynamicText = () => Mcp.MesenMcpServer.Instance.IsRunning
+					? "MCP Server [ON:" + ConfigManager.Config.Mcp.Port + "]"
+					: "MCP Server [OFF]",
 				SubActions = new List<object> {
 					new MainMenuAction() {
-						ActionType = ActionType.Record,
+						ActionType = ActionType.McpServerStart,
+						IsEnabled = () => !Mcp.MesenMcpServer.Instance.IsRunning,
+						OnClick = () => {
+							int port = (int)ConfigManager.Config.Mcp.Port;
+							Task.Run(async () => {
+								await Mcp.MesenMcpServer.Instance.StartAsync(port);
+								Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+									if(Mcp.MesenMcpServer.Instance.IsRunning) {
+										DisplayMessageHelper.DisplayMessage("MCP", "MCP Server started on port " + port);
+									} else {
+										DisplayMessageHelper.DisplayMessage("MCP Error", Mcp.MesenMcpServer.Instance.LastError ?? "Unknown error");
+									}
+								});
+							});
+						}
+					},
+					new MainMenuAction() {
+						ActionType = ActionType.McpServerStop,
+						IsEnabled = () => Mcp.MesenMcpServer.Instance.IsRunning,
+						OnClick = () => {
+							Task.Run(async () => {
+								await Mcp.MesenMcpServer.Instance.StopAsync();
+								Avalonia.Threading.Dispatcher.UIThread.Post(() => {
+									DisplayMessageHelper.DisplayMessage("MCP", "MCP Server stopped");
+								});
+							});
+						}
+					},
+					new ContextMenuSeparator(),
+					new MainMenuAction() {
+						ActionType = ActionType.McpServerConfigurePort,
+						IsEnabled = () => !Mcp.MesenMcpServer.Instance.IsRunning,
+						DynamicText = () => "Configure Port [" + ConfigManager.Config.Mcp.Port + "]",
+						OnClick = () => {
+							new McpConfigWindow() {
+								DataContext = ConfigManager.Config.Mcp.Clone()
+							}.ShowCenteredDialog((Control)wnd);
+						}
+					}
+				}
+			},
+		};
+	}
+
+	private MainMenuAction GetVideoRecorderMenu(MainWindow wnd)
+	{
+		return new MainMenuAction() {
+			ActionType = ActionType.VideoRecorder,
+			SubActions = new List<object> {
+				new MainMenuAction() {
+					ActionType = ActionType.Record,
 						IsEnabled = () => IsGameRunning && !RecordApi.AviIsRecording(),
 						OnClick = () => {
 							new VideoRecordWindow() {

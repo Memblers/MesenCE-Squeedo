@@ -1,0 +1,18 @@
+namespace Mesen.Mcp.Models
+{
+	// ── PPU state per console (used by console handlers) ─────────
+
+	public record NesPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public uint Cycle { get; init; } public uint FrameCount { get; init; } public bool VerticalBlank { get; init; } public bool Sprite0Hit { get; init; } public bool SpriteOverflow { get; init; } public string VideoRamAddr { get; init; } = ""; public byte ScrollX { get; init; } }
+	public record SnesPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int Cycle { get; init; } public int HClock { get; init; } public uint FrameCount { get; init; } public bool ForcedBlank { get; init; } public byte ScreenBrightness { get; init; } public byte BgMode { get; init; } public string VramAddress { get; init; } = ""; }
+	public record GbPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int Cycle { get; init; } public uint FrameCount { get; init; } public byte Ly { get; init; } public byte LyCompare { get; init; } public string Mode { get; init; } = ""; public byte ScrollX { get; init; } public byte ScrollY { get; init; } public byte WindowX { get; init; } public byte WindowY { get; init; } public bool CgbEnabled { get; init; } }
+	public record GbaPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int Cycle { get; init; } public uint FrameCount { get; init; } public byte BgMode { get; init; } public bool ForcedBlank { get; init; } }
+	public record SmsPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int Cycle { get; init; } public uint FrameCount { get; init; } public int VCounter { get; init; } public byte HorizontalScroll { get; init; } public byte VerticalScroll { get; init; } }
+	public record PcePpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int HClock { get; init; } public uint FrameCount { get; init; } public int RcrCounter { get; init; } }
+	public record WsPpuStateResponse { public string CpuType { get; init; } = ""; public int Scanline { get; init; } public int Cycle { get; init; } public uint FrameCount { get; init; } public string Mode { get; init; } = ""; public bool LcdEnabled { get; init; } }
+
+	// ── ROM headers (used by console handlers) ───────────────────
+
+	public record NesRomHeaderResponse { public string Format { get; init; } = ""; public int Mapper { get; init; } public int? SubMapper { get; init; } public int PrgRomSize { get; init; } public int ChrRomSize { get; init; } public string Mirroring { get; init; } = ""; public bool Battery { get; init; } public bool Trainer { get; init; } }
+
+	public record SnesRomHeaderResponse { public string Title { get; init; } = ""; public string MapMode { get; init; } = ""; public string MapModeName { get; init; } = ""; public bool FastRom { get; init; } public string RomType { get; init; } = ""; public string? RomTypeName { get; init; } public int RomSizeKB { get; init; } public int SramSizeKB { get; init; } public string Region { get; init; } = ""; public string DestinationCode { get; init; } = ""; public string? DeveloperId { get; init; } public string? MakerCode { get; init; } public string? GameCode { get; init; } public string Version { get; init; } = ""; public string Checksum { get; init; } = ""; public string ChecksumComplement { get; init; } = ""; public bool ChecksumValid { get; init; } public string HeaderOffset { get; init; } = ""; }
+}

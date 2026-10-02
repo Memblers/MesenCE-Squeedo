@@ -621,6 +621,11 @@ namespace Mesen.Debugger.Utilities
 		[IconFile("Export")]
 		SaveSpcFile,
 
+		McpServer,
+		McpServerStart,
+		McpServerStop,
+		McpServerConfigurePort,
+
 		[IconFile("Help")]
 		OnlineHelp,
 		[IconFile("CommandLine")]

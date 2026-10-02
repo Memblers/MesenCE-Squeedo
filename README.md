@@ -2,13 +2,13 @@
 
 Mesen is a multi-system emulator for Windows, Linux, and macOS. It supports NES, SNES, Game Boy (GB/SGB/GBC), Game Boy Advance, PC Engine, SMS/Game Gear, and WonderSwan (WS/WSC).
 
-This is a community-managed fork, created to maintain and expand this emulator into the future.
-
 This fork of Mesen Community Edition adds support for the Squeedo mapper, a flash cart prototype from 2005, which was also used for certain builds of MIDINES.  Squeedo includes a PIC18F4620, with a bidirectional parallel port interface to the NES data bus.
+
+Additionally, this fork includes MCP server features from sadnescity fork of MesenCE.  Available here: <https://github.com/sadnescity/MesenCE>
 
 ## Squeedo Specs
 
-PIC18F4620 is an MCU released in 2004, and was the best available with this parallel port feature in a DIP-40 package.  During development, other parts considered for cost reasons were PIC16F877, and PIC18F452.
+PIC18F4620 is an MCU released in 2004, in Microchip's PIC18F family at the time, it offered the largest ROM/RAM size while also including this parallel port feature in a DIP-40 package.
 * 64kB Program Flash, 16-bit instruction width
 * 3.9kB Data RAM
 * 8-bit PIC18F CPU, 10 MIPS @ 40 Mhz, single cycle 8x8 multiply
@@ -22,7 +22,7 @@ Firmware must be provided in Intel Hex format, with the same name as the .NES fi
 
 ## Disclosure
 
-LLM-generated code is present in this build.  Token costs were roughly $10 to write it (mostly MiMo V2.5 Pro), and $13 to debug it (mostly Deepseek V4 Pro), with the initial version developed over 4 days.  My additions are provided under MIT License.
+LLM-generated code is present in this project.  Token costs were roughly $10 to write it (mostly MiMo V2.5 Pro), and $13 to debug it (mostly Deepseek V4 Pro), with the initial version developed over 4 days.  My additions are provided under MIT License.
 
 ## Compiling
 
