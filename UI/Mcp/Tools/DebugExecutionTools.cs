@@ -16,38 +16,64 @@ namespace Mesen.Mcp.Tools
 		[McpServerTool(Name = "mesen_step", ReadOnly = false, Destructive = false, OpenWorld = false),
 		 Description("Step the CPU by a number of instructions. Type can be 'Step', 'StepOver', 'StepOut', 'CpuCycleStep', 'PpuStep', 'PpuScanline', 'PpuFrame'.")]
 		public static string Step(
-			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Spc, NecDsp, Sa1, Gsu, Cx4")] string cpuType,
-			[Description("Number of steps (default 1)")] int count = 1,
-			[Description("Step type: Step, StepOver, StepOut, CpuCycleStep, PpuStep, PpuScanline, PpuFrame")] string stepType = "Step")
-		{
-			McpToolHelper.EnsureDebuggerReady();
-			CpuType cpu = McpToolHelper.ParseCpuType(cpuType);
+		[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Spc, Pic18, NecDsp, Sa1, Gsu, Cx4")] string cpuType,
+		[Description("Number of steps (default 1)")] int count = 1,
+		[Description("Step type: Step, StepOver, StepOut, CpuCycleStep, PpuStep, PpuScanline, PpuFrame")] string stepType = "Step")
+	{
+		McpToolHelper.EnsureDebuggerReady();
+		CpuType cpu = McpToolHelper.ParseCpuType(cpuType);
 
-			if(!Enum.TryParse<StepType>(stepType, true, out StepType step)) {
-				throw new McpException("Invalid step type: " + stepType);
+		if(!Enum.TryParse<StepType>(stepType, true, out StepType step)) {
+			throw new McpException("Invalid step type: " + stepType);
+		}
+
+		// For sub-CPUs (Pic18, Spc, etc.), IsPaused() never returns true because
+		// SleepUntilResume skips non-main CPUs. Poll for PC change instead.
+			ConsoleType console = EmuApi.GetRomInfo().ConsoleType;
+			bool isMainCpu = (console == ConsoleType.Nes && cpu == CpuType.Nes)
+				|| (console == ConsoleType.Snes && cpu == CpuType.Snes)
+				|| (console == ConsoleType.Gameboy && cpu == CpuType.Gameboy)
+				|| (console == ConsoleType.Gba && cpu == CpuType.Gba)
+				|| (console == ConsoleType.PcEngine && cpu == CpuType.Pce)
+				|| (console == ConsoleType.Sms && cpu == CpuType.Sms)
+				|| (console == ConsoleType.Ws && cpu == CpuType.Ws);
+
+			uint prevPc = 0;
+			if(!isMainCpu) {
+				prevPc = DebugApi.GetProgramCounter(cpu, false);
 			}
 
 			DebugApi.Step(cpu, count, step);
 
-			// Poll until execution pauses, with timeout
-			int elapsed = 0;
-			int maxWait = step == StepType.StepOut || step == StepType.PpuFrame ? 2000 : 500;
-			while(!EmuApi.IsPaused() && elapsed < maxWait) {
-				System.Threading.Thread.Sleep(5);
-				elapsed += 5;
+			if(isMainCpu) {
+				int elapsed = 0;
+				int maxWait = step == StepType.StepOut || step == StepType.PpuFrame ? 2000 : 500;
+				while(!EmuApi.IsPaused() && elapsed < maxWait) {
+					System.Threading.Thread.Sleep(5);
+					elapsed += 5;
+				}
+			} else {
+				//Wait until the step completes. The emulator stops again when the requested
+				//instructions have executed. Detect completion via the PC changing (normal case)
+				//or the cycle count advancing (self-branching code where the PC never changes).
+				ulong prevCycles = DebugApi.GetInstructionProgress(cpu).CurrentCycle;
+				int elapsed = 0;
+				int maxWait = step == StepType.StepOut ? 2000 : 500;
+				while(elapsed < maxWait) {
+					System.Threading.Thread.Sleep(2);
+					elapsed += 2;
+					if(EmuApi.IsPaused() || DebugApi.GetProgramCounter(cpu, false) != prevPc || DebugApi.GetInstructionProgress(cpu).CurrentCycle != prevCycles) {
+						//Give the emulation thread a moment to settle into the stopped state
+						System.Threading.Thread.Sleep(2);
+						break;
+					}
+				}
+				if(elapsed >= maxWait && DebugApi.GetProgramCounter(cpu, false) == prevPc && DebugApi.GetInstructionProgress(cpu).CurrentCycle == prevCycles) {
+					throw new McpException($"Step did not complete within {maxWait}ms - the {cpu} did not execute any instructions. " + GetCpuStateText(cpu));
+				}
 			}
 
 			return GetCpuStateText(cpu);
-		}
-
-		[McpServerTool(Name = "mesen_resume_execution", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Resume execution after a breakpoint or step.")]
-		public static string ResumeExecution()
-		{
-			McpToolHelper.EnsureDebuggerReady();
-
-			DebugApi.ResumeExecution();
-			return "Execution resumed.";
 		}
 
 		[McpServerTool(Name = "mesen_breakpoint", ReadOnly = false, Destructive = false, OpenWorld = false),

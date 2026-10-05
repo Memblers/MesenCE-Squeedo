@@ -151,6 +151,10 @@ void Pic18Peripherals::NesWrite(uint8_t regAddr, uint8_t value)
 	// NES writing to PSP
 	_pspLatchAddr = regAddr & 0x1F;
 	_pspWriteData = value;
+	if(_state.PspIbf) {
+		// Overflow: NES wrote again before the PIC read PORTD (IBOV must be cleared in software)
+		_state.PspIbov = true;
+	}
 	_state.PspIbf = true;
 	_state.Data[Pic18Sfr::PORTD & 0xFFF] = value;  // Data appears on PortD
 	_state.Data[Pic18Sfr::PORTB & 0xFFF] = (_state.Data[Pic18Sfr::PORTB & 0xFFF] & 0xE0) | (regAddr & 0x1F);  // Address on PortB 0-4
@@ -173,30 +177,39 @@ void Pic18Peripherals::UartReceiveByte(uint8_t byte)
 	}
 }
 
-uint8_t Pic18Peripherals::ReadSfr(uint16_t addr)
+uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 {
 	switch(addr) {
 	// Timer reads with latching
 	case Pic18Sfr::TMR0L:
-		_state.TMR0ReadLatch = _state.Data[Pic18Sfr::TMR0H & 0xFFF];
+		if(!peek) {
+			_state.TMR0ReadLatch = _state.Data[Pic18Sfr::TMR0H & 0xFFF];
+		}
 		return _state.Data[Pic18Sfr::TMR0L & 0xFFF];
 	case Pic18Sfr::TMR0H:
-		return _state.TMR0ReadLatch;
+		return peek ? _state.Data[Pic18Sfr::TMR0H & 0xFFF] : _state.TMR0ReadLatch;
 
 	case Pic18Sfr::TMR1L:
-		_state.TMR1ReadLatch = _state.Data[Pic18Sfr::TMR1H & 0xFFF];
+		if(!peek) {
+			_state.TMR1ReadLatch = _state.Data[Pic18Sfr::TMR1H & 0xFFF];
+		}
 		return _state.Data[Pic18Sfr::TMR1L & 0xFFF];
 	case Pic18Sfr::TMR1H:
-		return _state.TMR1ReadLatch;
+		return peek ? _state.Data[Pic18Sfr::TMR1H & 0xFFF] : _state.TMR1ReadLatch;
 
 	case Pic18Sfr::TMR3L:
-		_state.TMR3ReadLatch = _state.Data[Pic18Sfr::TMR3H & 0xFFF];
+		if(!peek) {
+			_state.TMR3ReadLatch = _state.Data[Pic18Sfr::TMR3H & 0xFFF];
+		}
 		return _state.Data[Pic18Sfr::TMR3L & 0xFFF];
 	case Pic18Sfr::TMR3H:
-		return _state.TMR3ReadLatch;
+		return peek ? _state.Data[Pic18Sfr::TMR3H & 0xFFF] : _state.TMR3ReadLatch;
 
 	// UART receive
 	case Pic18Sfr::RCREG:
+		if(peek) {
+			return _state.Data[Pic18Sfr::RCREG & 0xFFF];
+		}
 		if(!_rxBuffer.empty()) {
 			_rxBuffer.pop_front();
 			if(_rxBuffer.empty()) {
@@ -208,11 +221,28 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr)
 		}
 		return _state.Data[Pic18Sfr::RCREG & 0xFFF];
 
-	// TRISE: bits 4-5 are read-only PSP status (IBF, OBF), must reflect live state
+	// PORTD read in PSP mode returns the input buffer (data written by the NES)
+	// and clears IBF — this is the only way IBF gets cleared on real hardware
+	case Pic18Sfr::PORTD:
+		if(!peek) {
+			_state.PspIbf = false;
+		}
+		return _pspWriteData;
+
+	// TRISE: bits 7-5 are read-only PSP status (IBF, OBF, IBOV), must reflect live state
+	// PIC18F4525 datasheet: IBF=bit7, OBF=bit6, IBOV=bit5, PSPMODE=bit4
 	case Pic18Sfr::TRISE:
-		return (_state.Data[Pic18Sfr::TRISE & 0xFFF] & 0x8F)
-			| (_state.PspIbf ? 0x10 : 0x00)  // bit 4 = IBF
-			| (_state.PspObf ? 0x20 : 0x00);  // bit 5 = OBF
+		return (_state.Data[Pic18Sfr::TRISE & 0xFFF] & 0x1F)
+			| (_state.PspIbf ? 0x80 : 0x00)   // bit 7 = IBF
+			| (_state.PspObf ? 0x40 : 0x00)   // bit 6 = OBF
+			| (_state.PspIbov ? 0x20 : 0x00); // bit 5 = IBOV
+
+	// Core registers that must return live state (PC/flags live in _state, not Data)
+	case Pic18Sfr::STATUS: return _state.STATUS;
+	case Pic18Sfr::WREG: return _state.W;
+	case Pic18Sfr::PCL: return (uint8_t)((_state.PC * 2) & 0xFF);
+	case Pic18Sfr::PCLATH: return _state.PCLATH;
+	case Pic18Sfr::PCLATU: return _state.PCLATU;
 
 	// FSR reads - return live values from _state.FSR (not stale Data memory)
 	case Pic18Sfr::FSR0L: return _state.FSR[0] & 0xFF;
@@ -223,21 +253,21 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr)
 	case Pic18Sfr::FSR2H: return (_state.FSR[2] >> 8) & 0x0F;
 
 	// INDF reads (indirect addressing)
-	case Pic18Sfr::INDF0: return ReadSfr(GetFSRAddr(0));
-	case Pic18Sfr::POSTINC0: { uint8_t v = ReadSfr(GetFSRAddr(0)); _state.FSR[0]++; return v; }
-	case Pic18Sfr::POSTDEC0: { uint8_t v = ReadSfr(GetFSRAddr(0)); _state.FSR[0]--; return v; }
-	case Pic18Sfr::PREINC0: { _state.FSR[0]++; return ReadSfr(GetFSRAddr(0)); }
-	case Pic18Sfr::PLUSW0: return ReadSfr((_state.FSR[0] + (int8_t)_state.W) & 0xFFF);
-	case Pic18Sfr::INDF1: return ReadSfr(GetFSRAddr(1));
-	case Pic18Sfr::POSTINC1: { uint8_t v = ReadSfr(GetFSRAddr(1)); _state.FSR[1]++; return v; }
-	case Pic18Sfr::POSTDEC1: { uint8_t v = ReadSfr(GetFSRAddr(1)); _state.FSR[1]--; return v; }
-	case Pic18Sfr::PREINC1: { _state.FSR[1]++; return ReadSfr(GetFSRAddr(1)); }
-	case Pic18Sfr::PLUSW1: return ReadSfr((_state.FSR[1] + (int8_t)_state.W) & 0xFFF);
-	case Pic18Sfr::INDF2: return ReadSfr(GetFSRAddr(2));
-	case Pic18Sfr::POSTINC2: { uint8_t v = ReadSfr(GetFSRAddr(2)); _state.FSR[2]++; return v; }
-	case Pic18Sfr::POSTDEC2: { uint8_t v = ReadSfr(GetFSRAddr(2)); _state.FSR[2]--; return v; }
-	case Pic18Sfr::PREINC2: { _state.FSR[2]++; return ReadSfr(GetFSRAddr(2)); }
-	case Pic18Sfr::PLUSW2: return ReadSfr((_state.FSR[2] + (int8_t)_state.W) & 0xFFF);
+	case Pic18Sfr::INDF0: return ReadSfr(GetFSRAddr(0), peek);
+	case Pic18Sfr::POSTINC0: { uint8_t v = ReadSfr(GetFSRAddr(0), peek); if(!peek) _state.FSR[0]++; return v; }
+	case Pic18Sfr::POSTDEC0: { uint8_t v = ReadSfr(GetFSRAddr(0), peek); if(!peek) _state.FSR[0]--; return v; }
+	case Pic18Sfr::PREINC0: { if(!peek) _state.FSR[0]++; return ReadSfr(GetFSRAddr(0), peek); }
+	case Pic18Sfr::PLUSW0: return ReadSfr((_state.FSR[0] + (int8_t)_state.W) & 0xFFF, peek);
+	case Pic18Sfr::INDF1: return ReadSfr(GetFSRAddr(1), peek);
+	case Pic18Sfr::POSTINC1: { uint8_t v = ReadSfr(GetFSRAddr(1), peek); if(!peek) _state.FSR[1]++; return v; }
+	case Pic18Sfr::POSTDEC1: { uint8_t v = ReadSfr(GetFSRAddr(1), peek); if(!peek) _state.FSR[1]--; return v; }
+	case Pic18Sfr::PREINC1: { if(!peek) _state.FSR[1]++; return ReadSfr(GetFSRAddr(1), peek); }
+	case Pic18Sfr::PLUSW1: return ReadSfr((_state.FSR[1] + (int8_t)_state.W) & 0xFFF, peek);
+	case Pic18Sfr::INDF2: return ReadSfr(GetFSRAddr(2), peek);
+	case Pic18Sfr::POSTINC2: { uint8_t v = ReadSfr(GetFSRAddr(2), peek); if(!peek) _state.FSR[2]++; return v; }
+	case Pic18Sfr::POSTDEC2: { uint8_t v = ReadSfr(GetFSRAddr(2), peek); if(!peek) _state.FSR[2]--; return v; }
+	case Pic18Sfr::PREINC2: { if(!peek) _state.FSR[2]++; return ReadSfr(GetFSRAddr(2), peek); }
+	case Pic18Sfr::PLUSW2: return ReadSfr((_state.FSR[2] + (int8_t)_state.W) & 0xFFF, peek);
 
 	default:
 		return _state.Data[addr & 0xFFF];
@@ -303,8 +333,16 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 	case Pic18Sfr::LATA: _state.Data[Pic18Sfr::LATA & 0xFFF] = value; _state.Data[Pic18Sfr::PORTA & 0xFFF] = value; _gpioDirty = true; return;
 	case Pic18Sfr::LATB: _state.Data[Pic18Sfr::LATB & 0xFFF] = value; _state.Data[Pic18Sfr::PORTB & 0xFFF] = value; _gpioDirty = true; return;
 	case Pic18Sfr::LATC: _state.Data[Pic18Sfr::LATC & 0xFFF] = value; _state.Data[Pic18Sfr::PORTC & 0xFFF] = value; _gpioDirty = true; return;
-	case Pic18Sfr::LATD: _state.Data[Pic18Sfr::LATD & 0xFFF] = value; _state.Data[Pic18Sfr::PORTD & 0xFFF] = value; _state.PspPortDOutput = value; return;
+	case Pic18Sfr::LATD: _state.Data[Pic18Sfr::LATD & 0xFFF] = value; _state.Data[Pic18Sfr::PORTD & 0xFFF] = value; _state.PspPortDOutput = value; _state.PspObf = true; return;
 	case Pic18Sfr::LATE: _state.Data[Pic18Sfr::LATE & 0xFFF] = value; _state.Data[Pic18Sfr::PORTE & 0xFFF] = value; return;
+
+	// TRISE: bits 7-6 (IBF/OBF) are read-only; bit 5 (IBOV) is software-clearable (write 0 to clear)
+	case Pic18Sfr::TRISE:
+		_state.Data[Pic18Sfr::TRISE & 0xFFF] = value & 0x1F;
+		if(!(value & 0x20)) {
+			_state.PspIbov = false;
+		}
+		return;
 
 	// Indirect writes
 	case Pic18Sfr::INDF0: WriteSfr(GetFSRAddr(0), value); return;
@@ -338,7 +376,16 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 	case Pic18Sfr::TBLPTRH: _state.TBLPTR = (_state.TBLPTR & 0x1F00FF) | ((uint32_t)value << 8); _state.Data[addr & 0xFFF] = value; return;
 	case Pic18Sfr::TBLPTRU: _state.TBLPTR = (_state.TBLPTR & 0x0FFFFF) | ((uint32_t)(value & 0x1F) << 16); _state.Data[addr & 0xFFF] = value & 0x1F; return;
 	case Pic18Sfr::TABLAT: _state.TABLAT = value; _state.Data[addr & 0xFFF] = value; return;
-	case Pic18Sfr::PCL: _state.Data[addr & 0xFFF] = value; return;  // PCL writes update PC low byte
+// Writing PCL performs a computed goto: PC<20:8> from PCLATU:PCLATH, PC<7:0> from the write
+		case Pic18Sfr::PCL: {
+			_state.Data[addr & 0xFFF] = value;
+			uint32_t byteAddr = ((uint32_t)(_state.PCLATU & 0x7F) << 16) | ((uint32_t)_state.PCLATH << 8) | value;
+			_state.PC = byteAddr >> 1;
+			return;
+		}
+		case Pic18Sfr::PCLATH: _state.PCLATH = value; _state.Data[addr & 0xFFF] = value; return;
+		case Pic18Sfr::PCLATU: _state.PCLATU = value & 0x7F; _state.Data[addr & 0xFFF] = value & 0x7F; return;
+		case Pic18Sfr::STATUS: _state.STATUS = value; _state.Data[addr & 0xFFF] = value; return;
 	case Pic18Sfr::WREG: _state.W = value; return;  // WREG is a pseudo-register
 
 	default:

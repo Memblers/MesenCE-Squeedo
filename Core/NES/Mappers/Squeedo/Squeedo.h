@@ -123,6 +123,9 @@ protected:
 		_emu->RegisterMemory(MemoryType::Pic18Memory, _picState.Program, Pic18PrgSize);
 		_emu->RegisterMemory(MemoryType::Pic18ProgramRom, _picState.Program, Pic18PrgSize);
 		_emu->RegisterMemory(MemoryType::Pic18DataRam, _picState.Data, Pic18DataSize);
+		// Pic18SfrRam covers the same flat data space (SFRs live at $F80-$FFF) so
+		// tools can use natural $F80-style addresses (PORTA=$F80, STATUS=$FD8...)
+		_emu->RegisterMemory(MemoryType::Pic18SfrRam, _picState.Data, Pic18DataSize);
 
 		// Apply initial banking from PIC GPIO state (all zero after reset)
 		ApplyGpioBanking();
@@ -341,6 +344,7 @@ protected:
 		SV(_picState.CycleCount);
 		SV(_picState.PspIbf);
 		SV(_picState.PspObf);
+		SV(_picState.PspIbov);
 		SV(_picState.PspPortDOutput);
 		SV(_picState.InterruptPending);
 		SVArray(_picState.Data, 4096);
@@ -375,6 +379,11 @@ public:
 
 	Pic18Cpu* GetPicCpu() { return _picCpu.get(); }
 	Pic18CpuState& GetPicState() { return _picState; }
+
+	// Debugger access to the PIC18 data space (GPR + SFRs).
+	// Reads are side-effect-free (no FSR auto-inc, no timer latches, no RCREG pop).
+	uint8_t DebugReadData(uint32_t addr) { return _picCpu ? _picCpu->PeekData((uint16_t)addr) : 0; }
+	void DebugWriteData(uint32_t addr, uint8_t value) { if(_picCpu) { _picCpu->WriteData((uint16_t)addr, value); } }
 };
 
 // Static member definition

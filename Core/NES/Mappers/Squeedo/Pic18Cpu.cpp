@@ -75,6 +75,15 @@ uint8_t Pic18Cpu::ReadData(uint16_t addr)
 	return _state.Data[addr];
 }
 
+uint8_t Pic18Cpu::PeekData(uint16_t addr)
+{
+	addr &= 0xFFF;
+	if(addr >= Pic18Sfr::SfrBase && _peripherals) {
+		return _peripherals->ReadSfr(addr, true);
+	}
+	return _state.Data[addr];
+}
+
 void Pic18Cpu::WriteData(uint16_t addr, uint8_t value)
 {
 	addr &= 0xFFF;
@@ -157,23 +166,29 @@ bool Pic18Cpu::CheckInterrupts()
 		}
 	}
 
+	// Interrupt vectors are byte addresses from the PIC18 datasheet, converted to word addresses.
+	// High priority: byte 0x0008 → word 0x0004
+	// Low priority:  byte 0x0018 → word 0x000C
 	if(priorityEnabled) {
 		if(hasHighPriority && gie) {
 			PushStack(_state.PC);
-			_state.PC = 0x0008;
+			_state.PC = 0x0004;
+			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
 			_state.RCON &= ~Pic18RconBits::PD;
 			return true;
 		}
 		if(hasLowPriority && gie && peie) {
 			PushStack(_state.PC);
-			_state.PC = 0x0018;
+			_state.PC = 0x000C;
+			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
 			_state.RCON &= ~Pic18RconBits::PD;
 			return true;
 		}
 	} else {
 		if((hasHighPriority && gie) || (hasLowPriority && gie && peie)) {
 			PushStack(_state.PC);
-			_state.PC = 0x0008;
+			_state.PC = 0x0004;
+			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
 			_state.RCON &= ~Pic18RconBits::PD;
 			return true;
 		}
@@ -195,6 +210,10 @@ int Pic18Cpu::ExecuteInstruction()
 {
 	if(_state.InterruptPending) {
 		if(CheckInterrupts()) {
+			// Fast register stack: hardware auto-saves WREG/STATUS/BSR on interrupt entry
+			_state.WREG_S = _state.W;
+			_state.STATUS_S = _state.STATUS;
+			_state.BSR_S = _state.BSR;
 			_state.InterruptPending = false;
 			_state.CycleCount += 2;
 			return 2;
@@ -248,6 +267,14 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		// RETFIE: 0000 0000 0001 000s
 		if((opcode & 0xFFFE) == 0x0010) {
 			_state.PC = PopStack();
+			if(opcode & 0x01) {
+				// Fast return: WREG/STATUS/BSR auto-restored from the fast register stack
+				_state.W = _state.WREG_S;
+				_state.STATUS = _state.STATUS_S;
+				_state.BSR = _state.BSR_S & 0x0F;
+				_state.Data[Pic18Sfr::STATUS & 0xFFF] = _state.STATUS;
+				_state.Data[Pic18Sfr::BSR & 0xFFF] = _state.BSR;
+			}
 			_state.INTCON |= Pic18IntconBits::GIE;
 			return 2;
 		}
@@ -405,30 +432,31 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 	}
 
 	// ----------------------------------------------------------------
-	// 0x3: RLCF, RRCF, SWAPF, INCFSZ (byte-oriented)
+	// 0x3: RRCF/RLCF/SWAPF (byte-oriented)
 	// ----------------------------------------------------------------
 	case 0x3: {
 		bool d = (opcode >> 9) & 1;
 		bool a = (opcode >> 8) & 1;
 		uint16_t addr = ResolveAddr(f, !a);
 
+		// Encoding: 0011 00da = RRCF (case 0), 0011 01da = RLCF (case 1)
 		switch((opcode >> 10) & 0x03) {
-		case 0: // RLCF
-			val = ReadData(addr);
-			{ uint8_t oldC = (_state.STATUS & Pic18StatusBits::C) ? 1 : 0;
-			result = (val << 1) | oldC;
-			_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::Z | Pic18StatusBits::N);
-			if(val & 0x80) _state.STATUS |= Pic18StatusBits::C;
-			if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
-			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
-			if(d) WriteData(addr, result); else _state.W = result; }
-			return 1;
-		case 1: // RRCF
+		case 0: // RRCF
 			val = ReadData(addr);
 			{ uint8_t oldC2 = (_state.STATUS & Pic18StatusBits::C) ? 0x80 : 0;
 			result = (val >> 1) | oldC2;
 			_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::Z | Pic18StatusBits::N);
 			if(val & 1) _state.STATUS |= Pic18StatusBits::C;
+			if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
+			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
+			if(d) WriteData(addr, result); else _state.W = result; }
+			return 1;
+		case 1: // RLCF
+			val = ReadData(addr);
+			{ uint8_t oldC = (_state.STATUS & Pic18StatusBits::C) ? 1 : 0;
+			result = (val << 1) | oldC;
+			_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::Z | Pic18StatusBits::N);
+			if(val & 0x80) _state.STATUS |= Pic18StatusBits::C;
 			if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
 			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
 			if(d) WriteData(addr, result); else _state.W = result; }
@@ -449,7 +477,7 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 	}
 
 	// ----------------------------------------------------------------
-	// 0x4: RLNCF, RRNCF, INFSNZ, DCFSNZ (byte-oriented)
+	// 0x4: RRNCF, RLNCF, INFSNZ, DCFSNZ (byte-oriented)
 	// ----------------------------------------------------------------
 	case 0x4: {
 		bool d = (opcode >> 9) & 1;
@@ -457,15 +485,15 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		uint16_t addr = ResolveAddr(f, !a);
 
 		switch((opcode >> 10) & 0x03) {
-		case 0: // RLNCF
+		case 0: // RRNCF (encoding 0100 00da)
 			val = ReadData(addr);
-			result = (val << 1) | (val >> 7);
+			result = (val >> 1) | (val << 7);
 			SetNZ(result);
 			if(d) WriteData(addr, result); else _state.W = result;
 			return 1;
-		case 1: // RRNCF
+		case 1: // RLNCF (encoding 0100 01da)
 			val = ReadData(addr);
-			result = (val >> 1) | (val << 7);
+			result = (val << 1) | (val >> 7);
 			SetNZ(result);
 			if(d) WriteData(addr, result); else _state.W = result;
 			return 1;
@@ -774,6 +802,9 @@ void Pic18Cpu::Serialize(Serializer& s)
 	SV(_state.PRODL);
 	SV(_state.PCLATU);
 	SV(_state.PCLATH);
+	SV(_state.WREG_S);
+	SV(_state.STATUS_S);
+	SV(_state.BSR_S);
 	SV(_state.CycleCount);
 	SV(_state.PspIbf);
 	SV(_state.PspObf);

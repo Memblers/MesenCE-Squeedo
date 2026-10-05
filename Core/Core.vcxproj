@@ -840,6 +840,7 @@
     <ClCompile Include="Debugger\ExpressionEvaluator.Gsu.cpp" />
     <ClCompile Include="Debugger\ExpressionEvaluator.NecDsp.cpp" />
     <ClCompile Include="Debugger\ExpressionEvaluator.Nes.cpp" />
+    <ClCompile Include="Debugger\ExpressionEvaluator.Pic18.cpp" />
     <ClCompile Include="Debugger\ExpressionEvaluator.Pce.cpp" />
     <ClCompile Include="Debugger\ExpressionEvaluator.Sms.cpp" />
     <ClCompile Include="Debugger\ExpressionEvaluator.Snes.cpp" />

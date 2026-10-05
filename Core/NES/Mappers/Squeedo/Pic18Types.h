@@ -289,6 +289,12 @@ struct Pic18CpuState : public BaseState
 	uint8_t PCLATU = 0;
 	uint8_t PCLATH = 0;
 
+	// Fast register stack: WREG/STATUS/BSR are auto-saved on interrupt entry
+	// and restored by RETFIE with the fast-return bit (RETFIE f)
+	uint8_t WREG_S = 0;
+	uint8_t STATUS_S = 0;
+	uint8_t BSR_S = 0;
+
 	// RCON (interrupt priority enable)
 	uint8_t RCON = 0;
 
@@ -309,8 +315,9 @@ struct Pic18CpuState : public BaseState
 
 	// PSP state
 	uint8_t PspPortDOutput = 0;   // Data pre-loaded by PIC for NES reads
-	bool PspIbf = false;          // Input Buffer Full (NES wrote data)
-	bool PspObf = false;          // Output Buffer Full (PIC pre-loaded data)
+	bool PspIbf = false;          // Input Buffer Full (NES wrote data; cleared when PIC reads PORTD)
+	bool PspObf = false;          // Output Buffer Full (PIC pre-loaded data; cleared when NES reads)
+	bool PspIbov = false;         // Input Buffer Overflow (NES wrote while IBF still set; cleared in software)
 
 	// Interrupt state
 	bool InterruptPending = false;

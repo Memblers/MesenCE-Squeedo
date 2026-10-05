@@ -77,7 +77,9 @@ public:
 	bool UartHasReceivedData() const { return _rxDataReady; }
 
 	// SFR read/write (called by PIC18Cpu)
-	uint8_t ReadSfr(uint16_t addr);
+	// peek=true returns the same value a read would, but without side effects
+	// (no FSR auto-inc/dec, no timer latches, no RCREG pop, no IBF clear)
+	uint8_t ReadSfr(uint16_t addr, bool peek = false);
 	void WriteSfr(uint16_t addr, uint8_t value);
 
 	// Assert/de-assert NES IRQ

@@ -26,6 +26,15 @@ private:
 	uint32_t _prevPc = 0;
 	uint32_t _prevStackPointer = 0;
 
+	//True while the emulation thread is inside ProcessInstruction() (i.e. the fetch hook for
+	//the instruction at state.PC has run but the instruction has not executed yet). When the
+	//emulation is stopped anywhere else (e.g. at a main CPU boundary), the pending instruction's
+	//fetch hook has NOT fired yet. StepRequest counts are consumed at fetch, so Step() needs
+	//one extra step count in that case - see GetEffectiveStepCount().
+	std::atomic<bool> _inProcessInstruction = false;
+
+	int32_t GetEffectiveStepCount(int32_t stepCount);
+
 public:
 	Pic18Debugger(Debugger* debugger);
 	~Pic18Debugger();

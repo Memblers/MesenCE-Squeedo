@@ -31,6 +31,12 @@
 #include "Debugger/DebugUtilities.h"
 #include "Debugger/Disassembler.h"
 #include "Debugger/CdlManager.h"
+#include "NES/Mappers/Squeedo/Squeedo.h"
+
+static Squeedo* GetSqueedo(NesConsole* nesConsole)
+{
+	return nesConsole ? dynamic_cast<Squeedo*>(nesConsole->GetMapper()) : nullptr;
+}
 
 MemoryDumper::MemoryDumper(Debugger* debugger)
 {
@@ -288,6 +294,17 @@ void MemoryDumper::InternalSetMemoryValues(MemoryType originalMemoryType, uint32
 			case MemoryType::WsMemory: _wsConsole->GetMemoryManager()->DebugWrite(address, value); break;
 			case MemoryType::SpcDspRegisters: _spc->DebugWriteDspReg(address, value); break;
 
+			//PIC18 data/SFR space - go through WriteSfr so side effects apply
+			//(GPIO banking, PSP buffers, UART TX, register sync)
+			case MemoryType::Pic18DataRam:
+			case MemoryType::Pic18SfrRam: {
+				Squeedo* squeedo = GetSqueedo(_nesConsole);
+				if(squeedo) {
+					squeedo->DebugWriteData(address, value);
+				}
+				break;
+			}
+
 			default:
 				uint8_t* src = GetMemoryBuffer(memoryType);
 				if(src) {
@@ -388,6 +405,14 @@ uint8_t MemoryDumper::InternalGetMemoryValue(MemoryType memoryType, uint32_t add
 		case MemoryType::GbaMemory: return _gbaConsole->GetMemoryManager()->DebugRead(address);
 		case MemoryType::WsMemory: return _wsConsole->GetMemoryManager()->DebugRead(address);
 		case MemoryType::WsPort: return _wsConsole->GetMemoryManager()->DebugReadPort<uint8_t>(address);
+
+		//PIC18 data/SFR space - must go through the CPU so live registers
+		//(WREG, STATUS, FSR, PCL, timer latches, PSP state) are visible
+		case MemoryType::Pic18DataRam:
+		case MemoryType::Pic18SfrRam: {
+			Squeedo* squeedo = GetSqueedo(_nesConsole);
+			return squeedo ? squeedo->DebugReadData(address) : 0;
+		}
 
 		default:
 			uint8_t* src = GetMemoryBuffer(memoryType);

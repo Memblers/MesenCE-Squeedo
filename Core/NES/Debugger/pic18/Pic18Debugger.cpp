@@ -66,6 +66,9 @@ void Pic18Debugger::ProcessInstruction()
 {
 	if(!_cpu) return;
 
+	//We are now inside the fetch hook for the instruction at state.PC (it has not executed yet)
+	_inProcessInstruction = true;
+
 	Pic18CpuState& state = _cpu->GetState();
 	uint32_t pc = state.PC;
 	uint16_t opcode = ((uint16_t)_cpu->ReadProgram(pc * 2 + 1) << 8) | _cpu->ReadProgram(pc * 2);
@@ -106,6 +109,10 @@ void Pic18Debugger::ProcessInstruction()
 	_step->ProcessCpuExec();
 
 	_debugger->ProcessBreakConditions(CpuType::Pic18, *_step.get(), _breakpointManager.get(), operation, addrInfo);
+
+	//Returning from here means the pending instruction will now execute - the next
+	//ProcessInstruction call is for the following instruction.
+	_inProcessInstruction = false;
 }
 
 void Pic18Debugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType opType)
@@ -116,10 +123,71 @@ void Pic18Debugger::ProcessWrite(uint32_t addr, uint8_t value, MemoryOperationTy
 {
 }
 
+int32_t Pic18Debugger::GetEffectiveStepCount(int32_t stepCount)
+{
+	//StepRequest counts are consumed by ProcessCpuExec() at instruction fetch - i.e. when the
+	//hook for an instruction runs, BEFORE that instruction executes. If the emulation is
+	//currently stopped inside ProcessInstruction (paused at a PIC18 fetch boundary), the fetch
+	//of the pending instruction has already been counted and the requested number of
+	//instructions will execute as-is. If we are stopped anywhere else (main CPU boundary,
+	//pause from a running state, etc.), the pending instruction's fetch hook has not fired yet
+	//and would consume one step count without executing anything - add one extra count so the
+	//requested number of instructions actually execute.
+	return _inProcessInstruction ? stepCount : stepCount + 1;
+}
+
 void Pic18Debugger::Step(int32_t stepCount, StepType type)
 {
-	_step.reset(new StepRequest(type));
-	_step->StepCount = stepCount;
+	if(!_cpu) {
+		_step.reset(new StepRequest(type));
+		return;
+	}
+
+	StepRequest step(type);
+	switch(type) {
+		case StepType::Step:
+		case StepType::CpuCycleStep:
+			//The PIC18 has no cycle-level step hook - treat it as an instruction step
+			step.StepCount = GetEffectiveStepCount(stepCount);
+			break;
+
+		case StepType::StepOut: {
+			step.BreakAddress = _callstackManager->GetReturnAddress();
+			step.BreakStackPointer = _callstackManager->GetReturnStackPointer();
+			if(step.BreakAddress < 0) {
+				//Empty callstack - nothing to return to, degrade to a normal step
+				step.BreakAddress = -1;
+				step.BreakStackPointer = -1;
+				step.StepCount = GetEffectiveStepCount(stepCount);
+			}
+			break;
+		}
+
+		case StepType::StepOver: {
+			//Read the opcode of the instruction about to execute (at state.PC), not
+			//_prevOpCode - when stopped outside ProcessInstruction, _prevOpCode is the
+			//previously executed instruction.
+			Pic18CpuState& state = _cpu->GetState();
+			uint32_t pc = state.PC;
+			uint16_t opcode = ((uint16_t)_cpu->ReadProgram(pc * 2 + 1) << 8) | _cpu->ReadProgram(pc * 2);
+			if(Pic18DisUtils::IsJumpToSub(opcode)) {
+				//CALL/RCALL - break when execution returns to the instruction after the call
+				step.BreakAddress = (int64_t)(pc * 2 + Pic18DisUtils::GetInstructionSize(opcode));
+				step.BreakStackPointer = state.STKPTR;
+			} else {
+				//For any other instruction, step over is the same as step into
+				step.StepCount = GetEffectiveStepCount(1);
+			}
+			break;
+		}
+
+		default:
+			//PpuStep/PpuScanline/PpuFrame/SpecificScanline have no meaning for the PIC18
+			step.StepCount = GetEffectiveStepCount(stepCount);
+			break;
+	}
+
+	_step.reset(new StepRequest(step));
 }
 
 void Pic18Debugger::Run()
@@ -162,6 +230,9 @@ DebuggerFeatures Pic18Debugger::GetSupportedFeatures()
 {
 	DebuggerFeatures features = {};
 	features.ChangeProgramCounter = true;
+	features.StepOver = true;
+	features.StepOut = true;
+	features.CallStack = true;
 	return features;
 }
 

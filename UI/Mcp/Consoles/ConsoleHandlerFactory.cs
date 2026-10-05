@@ -14,6 +14,7 @@ namespace Mesen.Mcp.Consoles
 		private static readonly PceHandler _pce = new();
 		private static readonly SmsHandler _sms = new();
 		private static readonly WsHandler _ws = new();
+		private static readonly Pic18Handler _pic18 = new();
 
 		private static readonly Dictionary<CpuType, IConsoleHandler> _byCpu = new() {
 			[CpuType.Nes] = _nes,
@@ -24,7 +25,8 @@ namespace Mesen.Mcp.Consoles
 			[CpuType.Gba] = _gba,
 			[CpuType.Pce] = _pce,
 			[CpuType.Sms] = _sms,
-			[CpuType.Ws] = _ws
+			[CpuType.Ws] = _ws,
+			[CpuType.Pic18] = _pic18,
 		};
 
 		private static readonly Dictionary<ConsoleType, IConsoleHandler> _byConsole = new() {

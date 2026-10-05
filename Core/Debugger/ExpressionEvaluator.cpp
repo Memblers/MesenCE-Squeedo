@@ -72,6 +72,7 @@ unordered_map<string, int64_t>* ExpressionEvaluator::GetAvailableTokens()
 		case CpuType::Sms: return &GetSmsTokens();
 		case CpuType::Gba: return &GetGbaTokens();
 		case CpuType::Ws: return &GetWsTokens();
+		case CpuType::Pic18: return &GetPic18Tokens();
 	}
 
 	return nullptr;
@@ -428,6 +429,7 @@ int64_t ExpressionEvaluator::Evaluate(ExpressionData& data, EvalResultType& resu
 								case CpuType::Sms: token = GetSmsTokenValue(token, resultType); break;
 								case CpuType::Gba: token = GetGbaTokenValue(token, resultType); break;
 								case CpuType::Ws: token = GetWsTokenValue(token, resultType); break;
+						case CpuType::Pic18: token = GetPic18TokenValue(token, resultType); break;
 							}
 						}
 						break;
@@ -520,8 +522,8 @@ int64_t ExpressionEvaluator::Evaluate(ExpressionData& data, EvalResultType& resu
 				case EvalOperators::AbsoluteAddress: token = right >= 0 ? _debugger->GetAbsoluteAddress({ (int32_t)right, _cpuMemory }).Address : -1; break;
 				case EvalOperators::ReadDword: token = _debugger->GetMemoryDumper()->GetMemoryValue32(_cpuMemory, (uint32_t)right); break;
 
-				case EvalOperators::Bracket: token = _debugger->GetMemoryDumper()->GetMemoryValue(_cpuMemory, (uint32_t)right); break;
-				case EvalOperators::Braces: token = _debugger->GetMemoryDumper()->GetMemoryValue16(_cpuMemory, (uint32_t)right); break;
+				case EvalOperators::Bracket: token = _debugger->GetMemoryDumper()->GetMemoryValue(_readMemory, (uint32_t)right); break;
+				case EvalOperators::Braces: token = _debugger->GetMemoryDumper()->GetMemoryValue16(_readMemory, (uint32_t)right); break;
 				default: throw std::runtime_error("Invalid operator");
 			}
 		}
@@ -541,6 +543,9 @@ ExpressionEvaluator::ExpressionEvaluator(Debugger* debugger, IDebugger* cpuDebug
 	_labelManager = debugger->GetLabelManager();
 	_cpuType = cpuType;
 	_cpuMemory = DebugUtilities::GetCpuMemoryType(cpuType);
+	//[]/{} reads "ram" - for the PIC18 the CPU address space is program memory,
+	//so brackets read the 4KB data space (GPR + SFRs) instead.
+	_readMemory = cpuType == CpuType::Pic18 ? MemoryType::Pic18DataRam : _cpuMemory;
 }
 
 bool ExpressionEvaluator::ReturnBool(int64_t value, EvalResultType& resultType)

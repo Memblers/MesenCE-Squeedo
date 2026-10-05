@@ -247,6 +247,7 @@ private:
 	LabelManager* _labelManager;
 	CpuType _cpuType;
 	MemoryType _cpuMemory;
+	MemoryType _readMemory;
 
 	bool IsOperator(string token, int& precedence, bool unaryOperator);
 	EvalOperators GetOperator(string token, bool unaryOperator);
@@ -288,6 +289,9 @@ private:
 
 	unordered_map<string, int64_t>& GetWsTokens();
 	int64_t GetWsTokenValue(int64_t token, EvalResultType& resultType);
+
+	unordered_map<string, int64_t>& GetPic18Tokens();
+	int64_t GetPic18TokenValue(int64_t token, EvalResultType& resultType);
 
 	bool ReturnBool(int64_t value, EvalResultType& resultType);
 

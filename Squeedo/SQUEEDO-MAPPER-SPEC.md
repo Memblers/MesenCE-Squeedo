@@ -85,8 +85,11 @@ When the NES accesses $5000–$5FFF:
    - RE0: NES read strobe
    - RE1: NES write strobe
    - RE2: MAP CE (active low)
-4. The PSP hardware sets **IBF** (Input Buffer Full) on writes, **OBF** (Output
-   Buffer Full) on reads, and generates **PSPIF** (high-priority interrupt).
+4. The PSP hardware sets **IBF** (Input Buffer Full) when the NES writes, cleared
+   when the PIC reads PORTD. **OBF** (Output Buffer Full) is set when the PIC
+   writes PORTD, cleared when the NES reads. A second NES write before the PIC
+   reads PORTD sets **IBOV** (input buffer overflow, software-clearable).
+   Either strobe generates **PSPIF** (high-priority interrupt).
 
 ### 3.2 PIC GPIO Connections (Hardware — Fixed)
 

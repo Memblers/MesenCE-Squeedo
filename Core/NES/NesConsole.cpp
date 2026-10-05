@@ -404,6 +404,9 @@ AddressInfo NesConsole::GetAbsoluteAddress(AddressInfo& relAddress)
 		return _mapper->GetAbsoluteAddress(relAddress.Address);
 	} else if(relAddress.Type == MemoryType::Pic18Memory) {
 		return { relAddress.Address, MemoryType::Pic18ProgramRom };
+	} else if(relAddress.Type == MemoryType::Pic18DataRam || relAddress.Type == MemoryType::Pic18SfrRam) {
+		//PIC18 data/SFR addresses are absolute (flat 4KB data space)
+		return { relAddress.Address & 0xFFF, relAddress.Type };
 	} else {
 		return _mapper->GetPpuAbsoluteAddress(relAddress.Address);
 	}
@@ -413,6 +416,8 @@ AddressInfo NesConsole::GetRelativeAddress(AddressInfo& absAddress, CpuType cpuT
 {
 	if(absAddress.Type == MemoryType::Pic18ProgramRom) {
 		return { absAddress.Address, MemoryType::Pic18Memory };
+	} else if(absAddress.Type == MemoryType::Pic18DataRam || absAddress.Type == MemoryType::Pic18SfrRam) {
+		return { absAddress.Address & 0xFFF, absAddress.Type };
 	}
 	return _mapper->GetRelativeAddress(absAddress);
 }

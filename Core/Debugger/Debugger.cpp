@@ -1024,8 +1024,21 @@ DebuggerFeatures Debugger::GetDebuggerFeatures(CpuType cpuType)
 
 void Debugger::SetProgramCounter(CpuType cpuType, uint32_t addr)
 {
-	if(_debuggers[(int)cpuType].Debugger->AllowChangeProgramCounter) {
-		_debuggers[(int)cpuType].Debugger->SetProgramCounter(addr);
+	IDebugger* debugger = _debuggers[(int)cpuType].Debugger.get();
+	if(!debugger) {
+		return;
+	}
+
+	//AllowChangeProgramCounter is only true while the emulation thread is inside this CPU's
+	//ProcessInstruction hook. Sub-CPUs like the PIC18 only ever stop at their own instruction
+	//boundaries (they have no mid-instruction break points), so also allow changing their PC
+	//whenever execution is stopped. The main CPU keeps the stricter check since it can stop
+	//mid-instruction (e.g. on a memory breakpoint).
+	if(debugger->AllowChangeProgramCounter || (cpuType != _mainCpuType && IsExecutionStopped())) {
+		//Hold a break request while changing the PC so the emulation thread cannot resume
+		//mid-update (breakBetweenInstructions=false: never advance any CPU)
+		DebugBreakHelper helper(this);
+		debugger->SetProgramCounter(addr);
 	}
 }
 

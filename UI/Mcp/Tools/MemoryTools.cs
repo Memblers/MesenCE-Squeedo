@@ -152,7 +152,8 @@ namespace Mesen.Mcp.Tools
 		 Description("Convert between CPU (relative) and absolute (physical) addresses.")]
 		public static string GetAddressInfo(
 			[Description("Address to convert (decimal or 0x/$ hex)")] string address,
-			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws")] string cpuType)
+			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Pic18")] string cpuType,
+			[Description("Optional memory type for non-program spaces (e.g. Pic18DataRam, Pic18SfrRam)")] string? memoryType = null)
 		{
 			McpToolHelper.EnsureDebuggerReady();
 			uint addr = McpToolHelper.ParseAddress(address);
@@ -160,7 +161,7 @@ namespace Mesen.Mcp.Tools
 
 			AddressInfo relAddr = new AddressInfo() {
 				Address = (int)addr,
-				Type = cpu.ToMemoryType()
+				Type = memoryType != null ? McpToolHelper.ParseMemoryType(memoryType) : cpu.ToMemoryType()
 			};
 
 			AddressInfo absAddr = DebugApi.GetAbsoluteAddress(relAddr);

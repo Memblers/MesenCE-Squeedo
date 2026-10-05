@@ -110,6 +110,7 @@ public:
 	// Memory access (with SFR interception via peripherals)
 	uint8_t ReadData(uint16_t addr);
 	void WriteData(uint16_t addr, uint8_t value);
+	uint8_t PeekData(uint16_t addr);
 
 	// Program memory access (no interception)
 	uint8_t ReadProgram(uint32_t addr);
