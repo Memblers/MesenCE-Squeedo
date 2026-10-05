@@ -16,15 +16,15 @@ namespace Mesen.Mcp.Tools
 		 Description("Read memory from the emulator. Returns a compact hex string. Use mesen_list_memory_types to see valid memory types for the current ROM.")]
 		public static string ReadMemory(
 			[Description("Start address (decimal or 0x/$ hex)")] string address,
-			[Description("Number of bytes to read (max 4096)")] int length,
 			[Description("Memory type (call mesen_list_memory_types first to get valid values for the current ROM)")] string memoryType,
+			[Description("Number of bytes to read (max 4096, default 1)")] int length = 1,
 			[Description("Optional file path to save the raw binary dump")] string? outputFile = null)
 		{
 			McpToolHelper.EnsureDebuggerReady();
 			uint addr = McpToolHelper.ParseAddress(address);
 			MemoryType memType = McpToolHelper.ParseMemoryType(memoryType);
 
-			length = Math.Min(length, 4096);
+			length = Math.Clamp(length, 1, 4096);
 			Int32 memSize = DebugApi.GetMemorySize(memType);
 			if(addr >= memSize) {
 				throw new McpException($"Address ${addr:X4} out of range. Memory size: ${memSize:X4}");

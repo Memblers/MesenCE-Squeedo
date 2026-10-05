@@ -34,6 +34,13 @@ uint32_t DisassemblySearch::SearchDisassembly(CpuType cpuType, const char* searc
 	int step = options.SearchBackwards ? -1 : 1;
 
 	string searchStr = searchString;
+	if(!options.MatchCase) {
+		//TextContains lowercases haystack chars when !MatchCase - the needle
+		//must be lowercase too or uppercase searches can never match
+		for(char& c : searchStr) {
+			c = (char)std::tolower((unsigned char)c);
+		}
+	}
 
 	int32_t startRow = _disassembler->GetMatchingRow(rows, startAddress, options.SearchBackwards);
 	if(options.SearchBackwards) {

@@ -272,10 +272,10 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_evaluate_expression", ReadOnly = true, Destructive = false, OpenWorld = false),
-		 Description("Evaluate a debugger expression (e.g. 'A + X', '$4016', '[0x2000]').")]
+		 Description("Evaluate a debugger expression (e.g. 'A + X', '$4016', '[0x2000]'). For Pic18: [addr] and Data[addr] read the 4KB data RAM, SFR names (T3CON, PIR2, PORTA...) resolve to their data address inside []/{} (e.g. [T3CON]) or read the live register value when used bare (e.g. T3CON).")]
 		public static string EvaluateExpression(
 			[Description("Expression to evaluate")] string expression,
-			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws")] string cpuType)
+			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Pic18")] string cpuType)
 		{
 			McpToolHelper.EnsureDebuggerReady();
 			CpuType cpu = McpToolHelper.ParseCpuType(cpuType);

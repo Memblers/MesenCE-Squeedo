@@ -53,10 +53,10 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_find_occurrences", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Search disassembly for a text pattern. Returns all matching lines (max 500).")]
+		 Description("Search disassembly for a text pattern (case-insensitive by default). Returns all matching lines (max 500).")]
 		public static string FindOccurrences(
-			[Description("Text to search for in disassembly (e.g. 'NOP', 'JSR', 'LDA #$')")] string searchString,
-			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Spc, Sa1, Gsu, Cx4")] string cpuType,
+			[Description("Text to search for in disassembly (e.g. 'NOP', 'JSR', 'LDA #$', 'MOVWF')")] string searchString,
+			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Spc, Sa1, Gsu, Cx4, Pic18")] string cpuType,
 			[Description("Case sensitive search (default false)")] bool matchCase = false,
 			[Description("Match whole word only (default false)")] bool matchWholeWord = false)
 		{

@@ -203,6 +203,11 @@ enum EvalValues : int64_t
 	RegIP,
 
 	FirstLabelIndex,
+
+	//PIC18 SFR name tokens (T3CON, PIR2...): Pic18SfrBase + 12-bit data address.
+	//Evaluated to the register's live value. Kept far above FirstLabelIndex so
+	//label tokens (FirstLabelIndex + n) can never collide with this range.
+	Pic18SfrBase = 3100000000000,
 };
 
 enum class EvalResultType : int32_t
@@ -252,7 +257,7 @@ private:
 	bool IsOperator(string token, int& precedence, bool unaryOperator);
 	EvalOperators GetOperator(string token, bool unaryOperator);
 	unordered_map<string, int64_t>* GetAvailableTokens();
-	bool CheckSpecialTokens(string expression, size_t& pos, string& output, ExpressionData& data);
+	bool CheckSpecialTokens(string expression, size_t& pos, string& output, ExpressionData& data, bool inBrackets);
 
 	unordered_map<string, int64_t>& GetSnesTokens();
 	int64_t GetSnesTokenValue(int64_t token, EvalResultType& resultType);
@@ -292,12 +297,13 @@ private:
 
 	unordered_map<string, int64_t>& GetPic18Tokens();
 	int64_t GetPic18TokenValue(int64_t token, EvalResultType& resultType);
+	int64_t GetPic18SfrAddress(const string& name);
 
 	bool ReturnBool(int64_t value, EvalResultType& resultType);
 
 	int64_t ProcessSharedTokens(string token);
 
-	string GetNextToken(string expression, size_t& pos, ExpressionData& data, bool& success, bool previousTokenIsOp);
+	string GetNextToken(string expression, size_t& pos, ExpressionData& data, bool& success, bool previousTokenIsOp, bool inBrackets);
 	bool ProcessSpecialOperator(EvalOperators evalOp, std::stack<EvalOperators>& opStack, std::stack<int>& precedenceStack, vector<int64_t>& outputQueue);
 	bool ToRpn(string expression, ExpressionData& data);
 	int64_t PrivateEvaluate(string expression, EvalResultType& resultType, MemoryOperationInfo& operationInfo, AddressInfo& addressInfo, bool& success);

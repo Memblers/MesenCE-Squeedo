@@ -78,7 +78,7 @@ unordered_map<string, int64_t>* ExpressionEvaluator::GetAvailableTokens()
 	return nullptr;
 }
 
-bool ExpressionEvaluator::CheckSpecialTokens(string expression, size_t& pos, string& output, ExpressionData& data)
+bool ExpressionEvaluator::CheckSpecialTokens(string expression, size_t& pos, string& output, ExpressionData& data, bool inBrackets)
 {
 	string token;
 	size_t initialPos = pos;
@@ -93,6 +93,23 @@ bool ExpressionEvaluator::CheckSpecialTokens(string expression, size_t& pos, str
 			break;
 		}
 	} while(pos < len);
+
+	if(_cpuType == CpuType::Pic18) {
+		//PIC18 SFR names (T3CON, PIR2...): inside [] or {} the name resolves to its
+		//data address ([T3CON] reads the register), bare use reads the live value.
+		int64_t sfrAddr = GetPic18SfrAddress(token);
+		if(sfrAddr >= 0) {
+			output += std::to_string(inBrackets ? sfrAddr : (int64_t)EvalValues::Pic18SfrBase + sfrAddr);
+			return true;
+		}
+
+		//Data[addr] is an alias for [addr] (reads the data space)
+		if(token == "data" && pos < len && expression[pos] == '[') {
+			pos++;
+			output = "[";
+			return true;
+		}
+	}
 
 	int64_t tokenValue = -1;
 
@@ -154,7 +171,7 @@ int64_t ExpressionEvaluator::ProcessSharedTokens(string token)
 	return -1;
 }
 
-string ExpressionEvaluator::GetNextToken(string expression, size_t& pos, ExpressionData& data, bool& success, bool previousTokenIsOp)
+string ExpressionEvaluator::GetNextToken(string expression, size_t& pos, ExpressionData& data, bool& success, bool previousTokenIsOp, bool inBrackets)
 {
 	string output;
 	success = true;
@@ -235,7 +252,7 @@ string ExpressionEvaluator::GetNextToken(string expression, size_t& pos, Express
 		}
 	} else {
 		//Special tokens and labels
-		success = CheckSpecialTokens(expression, pos, output, data);
+		success = CheckSpecialTokens(expression, pos, output, data, inBrackets);
 	}
 
 	return output;
@@ -279,7 +296,7 @@ bool ExpressionEvaluator::ToRpn(string expression, ExpressionData& data)
 	bool operatorOrEndTokenExpected = false;
 	while(true) {
 		bool success = true;
-		string token = GetNextToken(expression, position, data, success, previousTokenIsOp);
+		string token = GetNextToken(expression, position, data, success, previousTokenIsOp, bracketCount > 0 || braceCount > 0);
 		if(!success) {
 			return false;
 		}
@@ -388,7 +405,10 @@ int64_t ExpressionEvaluator::Evaluate(ExpressionData& data, EvalResultType& resu
 
 		if(token >= EvalValues::RegA) {
 			//Replace value with a special value
-			if(token >= EvalValues::FirstLabelIndex) {
+			if(token >= EvalValues::Pic18SfrBase) {
+				//PIC18 SFR name tokens (T3CON, PIR2...) resolve to the register's live value
+				token = GetPic18TokenValue(token, resultType);
+			} else if(token >= EvalValues::FirstLabelIndex) {
 				int64_t labelIndex = token - EvalValues::FirstLabelIndex;
 				if((size_t)labelIndex < data.Labels.size()) {
 					token = _labelManager->GetLabelRelativeAddress(data.Labels[(uint32_t)labelIndex], _cpuType);

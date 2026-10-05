@@ -1,7 +1,28 @@
 #include "pch.h"
 #include "Debugger/ExpressionEvaluator.h"
+#include "Debugger/Debugger.h"
+#include "Debugger/MemoryDumper.h"
 #include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "NES/Debugger/pic18/Pic18Debugger.h"
+
+// Case-insensitive SFR name -> data address lookup (T3CON = 0xFB1, etc.)
+int64_t ExpressionEvaluator::GetPic18SfrAddress(const string& name)
+{
+	static const std::unordered_map<std::string, uint16_t> nameToAddr = []() {
+		std::unordered_map<std::string, uint16_t> map;
+		for(auto& entry : Pic18SfrNameMap()) {
+			std::string lowerName = entry.second;
+			for(char& c : lowerName) {
+				c = (char)std::tolower((unsigned char)c);
+			}
+			map[lowerName] = entry.first;
+		}
+		return map;
+	}();
+
+	auto result = nameToAddr.find(name);
+	return result != nameToAddr.end() ? (int64_t)result->second : -1;
+}
 
 unordered_map<string, int64_t>& ExpressionEvaluator::GetPic18Tokens()
 {
@@ -31,6 +52,11 @@ unordered_map<string, int64_t>& ExpressionEvaluator::GetPic18Tokens()
 
 int64_t ExpressionEvaluator::GetPic18TokenValue(int64_t token, EvalResultType& resultType)
 {
+	//SFR name token (T3CON, PIR2...) - return the register's live value
+	if(token >= EvalValues::Pic18SfrBase) {
+		return _debugger->GetMemoryDumper()->GetMemoryValue(MemoryType::Pic18SfrRam, (uint32_t)(token - EvalValues::Pic18SfrBase));
+	}
+
 	Pic18CpuState& s = (Pic18CpuState&)((Pic18Debugger*)_cpuDebugger)->GetState();
 	switch(token) {
 		//PC is returned as a byte address (word PC * 2) to match GetProgramCounter,

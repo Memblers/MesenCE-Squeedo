@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "NES/Debugger/pic18/Pic18DisUtils.h"
+#include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "Utilities/HexUtilities.h"
 #include "Debugger/LabelManager.h"
 #include "Shared/MemoryType.h"
@@ -25,38 +26,7 @@ void Pic18DisUtils::GetDisassembly(string& out, uint16_t opcode, uint32_t pc, ui
 	};
 
 	// PIC18F4620 SFR name lookup (access bank: f >= 0x80 → SFR at 0xF00|f)
-	static const std::unordered_map<uint16_t, const char*> sfrNames = {
-		{0xF80,"PORTA"},{0xF81,"PORTB"},{0xF82,"PORTC"},{0xF83,"PORTD"},{0xF84,"PORTE"},
-		{0xF89,"LATA"},{0xF8A,"LATB"},{0xF8B,"LATC"},{0xF8C,"LATD"},{0xF8D,"LATE"},
-		{0xF92,"TRISA"},{0xF93,"TRISB"},{0xF94,"TRISC"},{0xF95,"TRISD"},{0xF96,"TRISE"},
-		{0xFD8,"STATUS"},{0xFE8,"WREG"},{0xFE0,"BSR"},{0xFD0,"RCON"},{0xFF2,"INTCON"},
-		{0xFF1,"INTCON2"},{0xFF0,"INTCON3"},
-		{0xFEF,"INDF0"},{0xFEE,"POSTINC0"},{0xFED,"POSTDEC0"},{0xFEC,"PREINC0"},{0xFEB,"PLUSW0"},
-		{0xFEA,"FSR0H"},{0xFE9,"FSR0L"},
-		{0xFE7,"INDF1"},{0xFE6,"POSTINC1"},{0xFE5,"POSTDEC1"},{0xFE4,"PREINC1"},{0xFE3,"PLUSW1"},
-		{0xFE2,"FSR1H"},{0xFE1,"FSR1L"},
-		{0xFDF,"INDF2"},{0xFDE,"POSTINC2"},{0xFDD,"POSTDEC2"},{0xFDC,"PREINC2"},{0xFDB,"PLUSW2"},
-		{0xFDA,"FSR2H"},{0xFD9,"FSR2L"},
-		{0xFD7,"TMR0H"},{0xFD6,"TMR0L"},{0xFD5,"T0CON"},
-		{0xFCF,"TMR1H"},{0xFCE,"TMR1L"},{0xFCD,"T1CON"},
-		{0xFCC,"TMR2"},{0xFCB,"PR2"},{0xFCA,"T2CON"},
-		{0xFB3,"TMR3H"},{0xFB2,"TMR3L"},{0xFB1,"T3CON"},
-		{0xFC4,"ADRESH"},{0xFC2,"ADCON0"},{0xFC1,"ADCON1"},
-		{0xFBF,"CCPR1H"},{0xFBE,"CCPR1L"},{0xFBD,"CCP1CON"},
-		{0xFBC,"CCPR2H"},{0xFBB,"CCPR2L"},{0xFBA,"CCP2CON"},
-		{0xFC9,"SSPBUF"},{0xFC8,"SSPADD"},{0xFC7,"SSPSTAT"},{0xFC6,"SSPCON1"},{0xFC5,"SSPCON2"},
-		{0xFAF,"SPBRG"},{0xFAE,"RCREG"},{0xFAD,"TXREG"},{0xFAC,"TXSTA"},{0xFAB,"RCSTA"},
-		{0xF9F,"IPR1"},{0xF9E,"PIR1"},{0xF9D,"PIE1"},
-		{0xFA2,"IPR2"},{0xFA1,"PIR2"},{0xFA0,"PIE2"},
-		{0xFD3,"OSCCON"},{0xF9B,"OSCTUNE"},
-		{0xFA9,"EEADR"},{0xFA8,"EEDATA"},{0xFA7,"EECON2"},{0xFA6,"EECON1"},
-		{0xFB4,"CMCON"},{0xFB5,"CVRCON"},{0xD2,"HLVDCON"},{0xFD1,"WDTCON"},
-		{0xFB7,"PWM1CON"},{0xFB6,"ECCP1AS"},
-		{0xFFF,"TOSU"},{0xFFE,"TOSH"},{0xFFD,"TOSL"},{0xFFC,"STKPTR"},
-		{0xFFB,"PCLATU"},{0xFFA,"PCLATH"},{0xFF9,"PCL"},
-		{0xFF8,"TBLPTRU"},{0xFF7,"TBLPTRH"},{0xFF6,"TBLPTRL"},{0xFF5,"TABLAT"},
-		{0xFF4,"PRODH"},{0xFF3,"PRODL"},
-	};
+	static const std::unordered_map<uint16_t, const char*>& sfrNames = Pic18SfrNameMap();
 	auto fmtAddr = [&](uint8_t reg) -> string {
 		uint16_t fullAddr = reg < 0x80 ? reg : (uint16_t)(0xF00 | reg);
 		auto it = sfrNames.find(fullAddr);

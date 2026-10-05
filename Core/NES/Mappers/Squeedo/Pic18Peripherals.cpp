@@ -244,6 +244,20 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 	case Pic18Sfr::PCLATH: return _state.PCLATH;
 	case Pic18Sfr::PCLATU: return _state.PCLATU;
 
+	// Registers updated in _state by the CPU/timers without syncing Data[]:
+	// interrupts set INTCON flags, PUSH/POP move STKPTR, MULLW/MULWF write
+	// PRODH:L, TBLRD auto-increments TBLPTR and writes TABLAT.
+	case Pic18Sfr::INTCON: return _state.INTCON;
+	case Pic18Sfr::RCON: return _state.RCON;
+	case Pic18Sfr::STKPTR: return _state.STKPTR;
+	case Pic18Sfr::BSR: return _state.BSR;
+	case Pic18Sfr::PRODH: return _state.PRODH;
+	case Pic18Sfr::PRODL: return _state.PRODL;
+	case Pic18Sfr::TABLAT: return _state.TABLAT;
+	case Pic18Sfr::TBLPTRL: return (uint8_t)(_state.TBLPTR & 0xFF);
+	case Pic18Sfr::TBLPTRH: return (uint8_t)((_state.TBLPTR >> 8) & 0xFF);
+	case Pic18Sfr::TBLPTRU: return (uint8_t)((_state.TBLPTR >> 16) & 0x1F);
+
 	// FSR reads - return live values from _state.FSR (not stale Data memory)
 	case Pic18Sfr::FSR0L: return _state.FSR[0] & 0xFF;
 	case Pic18Sfr::FSR0H: return (_state.FSR[0] >> 8) & 0x0F;
