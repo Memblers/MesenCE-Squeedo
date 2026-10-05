@@ -109,6 +109,19 @@ bool ExpressionEvaluator::CheckSpecialTokens(string expression, size_t& pos, str
 			output = "[";
 			return true;
 		}
+
+		//ROM[addr]/Prog[addr]/Program[addr] read program memory instead of data
+		if((token == "rom" || token == "prog" || token == "program") && pos < len) {
+			if(expression[pos] == '[') {
+				pos++;
+				output = "[R";
+				return true;
+			} else if(expression[pos] == '{') {
+				pos++;
+				output = "{R";
+				return true;
+			}
+		}
 	}
 
 	int64_t tokenValue = -1;
@@ -258,12 +271,12 @@ string ExpressionEvaluator::GetNextToken(string expression, size_t& pos, Express
 	return output;
 }
 
-bool ExpressionEvaluator::ProcessSpecialOperator(EvalOperators evalOp, std::stack<EvalOperators>& opStack, std::stack<int>& precedenceStack, vector<int64_t>& outputQueue)
+bool ExpressionEvaluator::ProcessSpecialOperator(EvalOperators evalOp, std::stack<EvalOperators>& opStack, std::stack<int>& precedenceStack, vector<int64_t>& outputQueue, EvalOperators altOp)
 {
 	if(opStack.empty()) {
 		return false;
 	}
-	while(opStack.top() != evalOp) {
+	while(opStack.top() != evalOp && opStack.top() != altOp) {
 		outputQueue.push_back(opStack.top());
 		opStack.pop();
 		precedenceStack.pop();
@@ -340,27 +353,28 @@ bool ExpressionEvaluator::ToRpn(string expression, ExpressionData& data)
 			previousTokenIsOp = true;
 		} else if(token[0] == ')') {
 			parenthesisCount--;
-			if(!ProcessSpecialOperator(EvalOperators::Parenthesis, opStack, precedenceStack, data.RpnQueue)) {
+			if(!ProcessSpecialOperator(EvalOperators::Parenthesis, opStack, precedenceStack, data.RpnQueue, EvalOperators::Parenthesis)) {
 				return false;
 			}
 			operatorOrEndTokenExpected = true;
 		} else if(token[0] == '[') {
 			bracketCount++;
-			opStack.push(EvalOperators::Bracket);
+			//[R is emitted by the ROM[addr] alias and reads program memory
+			opStack.push(token.size() > 1 && token[1] == 'R' ? EvalOperators::RomBracket : EvalOperators::Bracket);
 			precedenceStack.push(0);
 		} else if(token[0] == ']') {
 			bracketCount--;
-			if(!ProcessSpecialOperator(EvalOperators::Bracket, opStack, precedenceStack, data.RpnQueue)) {
+			if(!ProcessSpecialOperator(EvalOperators::Bracket, opStack, precedenceStack, data.RpnQueue, EvalOperators::RomBracket)) {
 				return false;
 			}
 			operatorOrEndTokenExpected = true;
 		} else if(token[0] == '{') {
 			braceCount++;
-			opStack.push(EvalOperators::Braces);
+			opStack.push(token.size() > 1 && token[1] == 'R' ? EvalOperators::RomBraces : EvalOperators::Braces);
 			precedenceStack.push(0);
 		} else if(token[0] == '}') {
 			braceCount--;
-			if(!ProcessSpecialOperator(EvalOperators::Braces, opStack, precedenceStack, data.RpnQueue)) {
+			if(!ProcessSpecialOperator(EvalOperators::Braces, opStack, precedenceStack, data.RpnQueue, EvalOperators::RomBraces)) {
 				return false;
 			}
 			operatorOrEndTokenExpected = true;
@@ -544,6 +558,10 @@ int64_t ExpressionEvaluator::Evaluate(ExpressionData& data, EvalResultType& resu
 
 				case EvalOperators::Bracket: token = _debugger->GetMemoryDumper()->GetMemoryValue(_readMemory, (uint32_t)right); break;
 				case EvalOperators::Braces: token = _debugger->GetMemoryDumper()->GetMemoryValue16(_readMemory, (uint32_t)right); break;
+
+				//ROM[addr]/ROM{addr} - read program memory (_cpuMemory for Pic18 is the program image)
+				case EvalOperators::RomBracket: token = _debugger->GetMemoryDumper()->GetMemoryValue(_cpuMemory, (uint32_t)right); break;
+				case EvalOperators::RomBraces: token = _debugger->GetMemoryDumper()->GetMemoryValue16(_cpuMemory, (uint32_t)right); break;
 				default: throw std::runtime_error("Invalid operator");
 			}
 		}

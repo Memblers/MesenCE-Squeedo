@@ -45,6 +45,10 @@ enum EvalOperators : int64_t
 	Bracket, //Read byte (8-bit)
 	Braces, //Read word (16-bit)
 
+	//Used to read program ROM (ROM[addr]/Prog[addr] syntax)
+	RomBracket, //Read program byte (8-bit)
+	RomBraces, //Read program word (16-bit)
+
 	//Special value, not used as an operator
 	Parenthesis,
 };
@@ -304,7 +308,7 @@ private:
 	int64_t ProcessSharedTokens(string token);
 
 	string GetNextToken(string expression, size_t& pos, ExpressionData& data, bool& success, bool previousTokenIsOp, bool inBrackets);
-	bool ProcessSpecialOperator(EvalOperators evalOp, std::stack<EvalOperators>& opStack, std::stack<int>& precedenceStack, vector<int64_t>& outputQueue);
+	bool ProcessSpecialOperator(EvalOperators evalOp, std::stack<EvalOperators>& opStack, std::stack<int>& precedenceStack, vector<int64_t>& outputQueue, EvalOperators altOp);
 	bool ToRpn(string expression, ExpressionData& data);
 	int64_t PrivateEvaluate(string expression, EvalResultType& resultType, MemoryOperationInfo& operationInfo, AddressInfo& addressInfo, bool& success);
 	ExpressionData* PrivateGetRpnList(string expression, bool& success);
