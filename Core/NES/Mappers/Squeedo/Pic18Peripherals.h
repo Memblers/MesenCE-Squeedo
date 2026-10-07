@@ -54,6 +54,7 @@ private:
 	uint8_t GetTimer1PrescalerDiv();
 	uint8_t GetTimer3PrescalerDiv();
 	uint16_t GetFSRAddr(int index);
+	uint8_t GetTosIndex();
 
 public:
 	Pic18Peripherals(Pic18CpuState& state, NesConsole* console);

@@ -142,7 +142,7 @@ FlagRCIE = (cpu.PIE1 & 0x20) != 0;
 
 StringBuilder sb = new();
 uint sp = (uint)(cpu.STKPTR & 0x1F);
-for(int i = (int)sp; i >= 0 && i < 31; i--) {
+for(int i = (int)sp - 1; i >= 0; i--) {
 sb.Append($"${cpu.Stack[i] & 0x1FFFFF:X5} ");
 }
 StackPreview = sb.ToString().TrimEnd();

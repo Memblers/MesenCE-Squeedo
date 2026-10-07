@@ -218,6 +218,15 @@ namespace Pic18StkptrBits
 	constexpr uint8_t STKUNF = 0x06;
 }
 
+// Hardware stack entry origin (per-level shadow used by RETFIE to restore
+// the enable bit that was cleared on interrupt entry)
+namespace Pic18StackEntryKind
+{
+	constexpr uint8_t Normal = 0;   // CALL/RCALL/PUSH — not an interrupt entry
+	constexpr uint8_t HighInt = 1;  // high-priority (or legacy) interrupt entry
+	constexpr uint8_t LowInt = 2;   // low-priority interrupt entry
+}
+
 // T0CON bits
 namespace Pic18T0conBits
 {
@@ -331,11 +340,17 @@ struct Pic18CpuState : public BaseState
 	uint8_t PCLATU = 0;
 	uint8_t PCLATH = 0;
 
-	// Fast register stack: WREG/STATUS/BSR are auto-saved on interrupt entry
-	// and restored by RETFIE with the fast-return bit (RETFIE f)
-	uint8_t WREG_S = 0;
-	uint8_t STATUS_S = 0;
-	uint8_t BSR_S = 0;
+	// Fast register stack (one shadow per hardware stack level): WREG/STATUS/BSR are
+	// auto-saved on interrupt entry and restored by RETFIE f. Per-level shadows so a
+	// preempting interrupt (high preempting low) can't clobber the interrupted
+	// level's saved registers.
+	uint8_t FastW[31] = {};
+	uint8_t FastStatus[31] = {};
+	uint8_t FastBsr[31] = {};
+
+	// How each hardware stack level was pushed (Pic18StackEntryKind):
+	// RETFIE restores GIEH (high/legacy entry) or GIEL (low entry) from this
+	uint8_t StackEntryKind[31] = {};
 
 	// RCON (interrupt priority enable)
 	uint8_t RCON = 0;

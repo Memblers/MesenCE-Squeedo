@@ -250,6 +250,12 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 	case Pic18Sfr::INTCON: return _state.INTCON;
 	case Pic18Sfr::RCON: return _state.RCON;
 	case Pic18Sfr::STKPTR: return _state.STKPTR;
+
+	// TOS registers are a window onto the hardware stack; STKPTR selects the level
+	// (write STKPTR to inspect other stack entries, like on real hardware)
+	case Pic18Sfr::TOSL: return (uint8_t)(_state.Stack[GetTosIndex()] & 0xFF);
+	case Pic18Sfr::TOSH: return (uint8_t)((_state.Stack[GetTosIndex()] >> 8) & 0xFF);
+	case Pic18Sfr::TOSU: return (uint8_t)((_state.Stack[GetTosIndex()] >> 16) & 0x1F);
 	case Pic18Sfr::BSR: return _state.BSR;
 	case Pic18Sfr::PRODH: return _state.PRODH;
 	case Pic18Sfr::PRODL: return _state.PRODL;
@@ -376,9 +382,25 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 	case Pic18Sfr::PLUSW2: WriteSfr((_state.FSR[2] + (int8_t)_state.W) & 0xFFF, value); return;
 
 	// Core registers that should update the state struct
-	case Pic18Sfr::INTCON: _state.INTCON = value; _state.Data[addr & 0xFFF] = value; return;
+	case Pic18Sfr::INTCON: _state.INTCON = value; _state.Data[addr & 0xFFF] = value; _state.InterruptPending = true; return;
 	case Pic18Sfr::RCON: _state.RCON = value; _state.Data[addr & 0xFFF] = value; return;
 	case Pic18Sfr::STKPTR: _state.STKPTR = value; _state.Data[addr & 0xFFF] = value; return;
+
+	// Setting interrupt flags/enables can assert an interrupt immediately (e.g. enabling
+	// TMR3IE while TMR3IF is already set) — re-evaluate pending interrupts on these writes
+	case Pic18Sfr::PIR1:
+	case Pic18Sfr::PIR2:
+	case Pic18Sfr::PIE1:
+	case Pic18Sfr::PIE2:
+	case Pic18Sfr::INTCON3:
+		_state.Data[addr & 0xFFF] = value;
+		_state.InterruptPending = true;
+		return;
+
+	// TOS registers write through to the selected hardware stack level
+	case Pic18Sfr::TOSL: _state.Stack[GetTosIndex()] = (_state.Stack[GetTosIndex()] & 0x1FFF00) | value; return;
+	case Pic18Sfr::TOSH: _state.Stack[GetTosIndex()] = (_state.Stack[GetTosIndex()] & 0x1F00FF) | ((uint32_t)value << 8); return;
+	case Pic18Sfr::TOSU: _state.Stack[GetTosIndex()] = (_state.Stack[GetTosIndex()] & 0x0FFFFF) | ((uint32_t)(value & 0x1F) << 16); return;
 	case Pic18Sfr::BSR: _state.BSR = value & 0x0F; _state.Data[addr & 0xFFF] = value & 0x0F; return;
 	case Pic18Sfr::FSR0L: _state.FSR[0] = (_state.FSR[0] & 0xF00) | value; _state.Data[addr & 0xFFF] = value; return;
 	case Pic18Sfr::FSR0H: _state.FSR[0] = (_state.FSR[0] & 0x0FF) | ((uint16_t)(value & 0x0F) << 8); _state.Data[addr & 0xFFF] = value & 0x0F; return;
@@ -406,6 +428,16 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 		_state.Data[addr & 0xFFF] = value;
 		return;
 	}
+}
+
+uint8_t Pic18Peripherals::GetTosIndex()
+{
+	// PushStack stores at Stack[STKPTR] then increments, so the most recently pushed
+	// entry (the one RETURN/RETFIE pop) sits at STKPTR-1. Writing STKPTR selects which
+	// stack level the TOS registers expose (real-hardware stack inspection technique).
+	// STKPTR=0 (empty stack) falls back to level 0.
+	uint8_t sp = _state.STKPTR & Pic18StkptrBits::STKPTR_MASK;
+	return sp == 0 ? 0 : (uint8_t)(sp - 1);
 }
 
 void Pic18Peripherals::SetNesIrq(bool active)

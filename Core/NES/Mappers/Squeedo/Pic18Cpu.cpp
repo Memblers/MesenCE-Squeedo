@@ -32,6 +32,10 @@ void Pic18Cpu::Reset()
 	_state.InterruptPending = false;
 
 	memset(_state.Stack, 0, sizeof(_state.Stack));
+	memset(_state.StackEntryKind, 0, sizeof(_state.StackEntryKind));
+	memset(_state.FastW, 0, sizeof(_state.FastW));
+	memset(_state.FastStatus, 0, sizeof(_state.FastStatus));
+	memset(_state.FastBsr, 0, sizeof(_state.FastBsr));
 	memset(_state.Data, 0, sizeof(_state.Data));
 
 	WriteData(Pic18Sfr::T0CON, 0xFF);
@@ -45,14 +49,39 @@ void Pic18Cpu::Reset()
 	WriteData(Pic18Sfr::PR2, 0xFF);
 }
 
-void Pic18Cpu::PushStack(uint32_t value)
+void Pic18Cpu::PushStack(uint32_t value, uint8_t kind)
 {
 	if((_state.STKPTR & Pic18StkptrBits::STKPTR_MASK) >= 31) {
 		_state.STKPTR |= (1 << Pic18StkptrBits::STKFUL);
 		return;
 	}
 	_state.Stack[_state.STKPTR & Pic18StkptrBits::STKPTR_MASK] = value & 0x1FFFFF;
+	_state.StackEntryKind[_state.STKPTR & Pic18StkptrBits::STKPTR_MASK] = kind;
 	_state.STKPTR++;
+}
+
+void Pic18Cpu::EnterInterrupt(uint32_t vector, uint8_t kind)
+{
+	// Fast register stack: hardware auto-saves WREG/STATUS/BSR on interrupt entry,
+	// one shadow per stack level (the return address is pushed to this level)
+	uint8_t level = _state.STKPTR & Pic18StkptrBits::STKPTR_MASK;
+	if(level > 30) level = 30;
+	_state.FastW[level] = _state.W;
+	_state.FastStatus[level] = _state.STATUS;
+	_state.FastBsr[level] = _state.BSR;
+
+	PushStack(_state.PC, kind);
+	_state.PC = vector;
+
+	// Interrupt entry clears the enable bit of the interrupt's own level: GIEH on a
+	// high-priority (or legacy) entry, GIEL on a low-priority entry. GIEH stays set
+	// during a low-priority ISR so a high-priority interrupt can still preempt it.
+	if(kind == Pic18StackEntryKind::LowInt) {
+		_state.INTCON &= ~Pic18IntconBits::PEIE;
+	} else {
+		_state.INTCON &= ~Pic18IntconBits::GIE;
+	}
+	_state.RCON &= ~Pic18RconBits::PD;
 }
 
 uint32_t Pic18Cpu::PopStack()
@@ -133,30 +162,46 @@ bool Pic18Cpu::CheckInterrupts()
 	uint8_t pir2 = _state.Data[Pic18Sfr::PIR2 & 0xFFF];
 	uint8_t pie2 = _state.Data[Pic18Sfr::PIE2 & 0xFFF];
 	uint8_t ipr1 = _state.Data[Pic18Sfr::IPR1 & 0xFFF];
+	uint8_t ipr2 = _state.Data[Pic18Sfr::IPR2 & 0xFFF];
+	uint8_t intcon2 = _state.Data[Pic18Sfr::INTCON2 & 0xFFF];
 	uint8_t intcon3 = _state.Data[Pic18Sfr::INTCON3 & 0xFFF];
 
 	bool hasHighPriority = false;
 	bool hasLowPriority = false;
+	// In legacy mode (IPEN=0) everything shares the 0x0008 vector: external/TMR0
+	// sources need GIE only, peripheral sources additionally need PEIE.
+	bool externalPending = false;
+	bool peripheralPending = false;
 
-	if((pir1 & pie1 & Pic18Pir1Bits::PSPIF)) hasHighPriority = true;
-	if((_state.INTCON & Pic18IntconBits::TMR0IF) && (_state.INTCON & Pic18IntconBits::TMR0IE)) hasHighPriority = true;
-	if((_state.INTCON & Pic18IntconBits::INT0IF) && (_state.INTCON & Pic18IntconBits::INT0IE)) hasHighPriority = true;
-
+	// TMR0/INT0/INT1/INT2 live in INTCON/INTCON3 and are not gated by PEIE.
+	// TMR0, INT1, INT2 have priority bits; INT0 is always high priority.
+	if((_state.INTCON & Pic18IntconBits::TMR0IF) && (_state.INTCON & Pic18IntconBits::TMR0IE)) {
+		externalPending = true;
+		if(priorityEnabled && !(intcon2 & Pic18IntconBits::TMR0IP)) hasLowPriority = true;
+		else hasHighPriority = true;
+	}
+	if((_state.INTCON & Pic18IntconBits::INT0IF) && (_state.INTCON & Pic18IntconBits::INT0IE)) {
+		externalPending = true;
+		hasHighPriority = true;
+	}
 	if((intcon3 & Pic18IntconBits::INT1IF) && (intcon3 & Pic18IntconBits::INT1IE)) {
+		externalPending = true;
 		if(priorityEnabled && (intcon3 & Pic18IntconBits::INT1IP)) hasHighPriority = true;
 		else hasLowPriority = true;
 	}
 	if((intcon3 & Pic18IntconBits::INT2IF) && (intcon3 & Pic18IntconBits::INT2IE)) {
+		externalPending = true;
 		if(priorityEnabled && (intcon3 & Pic18IntconBits::INT2IP)) hasHighPriority = true;
 		else hasLowPriority = true;
 	}
 
-	uint8_t periphFlags1 = pir1 & pie1 & ~Pic18Pir1Bits::PSPIF;
+	// Peripheral sources: priority comes from IPR1/IPR2 (including IPR1.PSPIP for the PSP)
+	uint8_t periphFlags1 = pir1 & pie1;
 	uint8_t periphFlags2 = pir2 & pie2;
-
 	if(periphFlags1 || periphFlags2) {
+		peripheralPending = true;
 		if(priorityEnabled) {
-			if((periphFlags1 & ipr1) || (periphFlags2 & _state.Data[Pic18Sfr::IPR2 & 0xFFF])) {
+			if((periphFlags1 & ipr1) || (periphFlags2 & ipr2)) {
 				hasHighPriority = true;
 			} else {
 				hasLowPriority = true;
@@ -169,32 +214,31 @@ bool Pic18Cpu::CheckInterrupts()
 	// Interrupt vectors are byte addresses from the PIC18 datasheet, converted to word addresses.
 	// High priority: byte 0x0008 → word 0x0004
 	// Low priority:  byte 0x0018 → word 0x000C
+	bool taken = false;
 	if(priorityEnabled) {
+		// GIEH enables high-priority interrupts; low-priority interrupts additionally
+		// need GIEL (which is also what prevents low priority from preempting a high ISR)
 		if(hasHighPriority && gie) {
-			PushStack(_state.PC);
-			_state.PC = 0x0004;
-			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
-			_state.RCON &= ~Pic18RconBits::PD;
-			return true;
-		}
-		if(hasLowPriority && gie && peie) {
-			PushStack(_state.PC);
-			_state.PC = 0x000C;
-			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
-			_state.RCON &= ~Pic18RconBits::PD;
-			return true;
+			EnterInterrupt(0x0004, Pic18StackEntryKind::HighInt);
+			taken = true;
+		} else if(hasLowPriority && gie && peie) {
+			EnterInterrupt(0x000C, Pic18StackEntryKind::LowInt);
+			taken = true;
 		}
 	} else {
-		if((hasHighPriority && gie) || (hasLowPriority && gie && peie)) {
-			PushStack(_state.PC);
-			_state.PC = 0x0004;
-			_state.INTCON &= ~Pic18IntconBits::GIE;  // PIC18 clears GIE on interrupt entry
-			_state.RCON &= ~Pic18RconBits::PD;
-			return true;
+		// Legacy mode: all interrupts share the 0x0008 vector
+		if((externalPending && gie) || (peripheralPending && gie && peie)) {
+			EnterInterrupt(0x0004, Pic18StackEntryKind::HighInt);
+			taken = true;
 		}
 	}
 
-	return false;
+	// Interrupts are level-sensitive: keep InterruptPending alive while any source is
+	// still asserted (flag & enable), even when it is masked by GIE/PEIE or was just
+	// taken and the ISR hasn't cleared the flag yet. This way a masked interrupt fires
+	// as soon as it is unmasked instead of waiting for the next peripheral event.
+	_state.InterruptPending = hasHighPriority || hasLowPriority;
+	return taken;
 }
 
 int Pic18Cpu::Run(int cyclesToRun)
@@ -208,17 +252,12 @@ int Pic18Cpu::Run(int cyclesToRun)
 
 int Pic18Cpu::ExecuteInstruction()
 {
-	if(_state.InterruptPending) {
-		if(CheckInterrupts()) {
-			// Fast register stack: hardware auto-saves WREG/STATUS/BSR on interrupt entry
-			_state.WREG_S = _state.W;
-			_state.STATUS_S = _state.STATUS;
-			_state.BSR_S = _state.BSR;
-			_state.InterruptPending = false;
-			_state.CycleCount += 2;
-			return 2;
-		}
-		_state.InterruptPending = false;
+	// CheckInterrupts keeps InterruptPending in sync with the asserted (flag & enable)
+	// sources, so an interrupt stays pending until it is taken or its flag is cleared.
+	if(_state.InterruptPending && CheckInterrupts()) {
+		// EnterInterrupt did the stack push and fast register shadow save
+		_state.CycleCount += 2;
+		return 2;
 	}
 
 	// PIC18 program memory is stored little-endian: byte[0]=low, byte[1]=high
@@ -267,15 +306,26 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		// RETFIE: 0000 0000 0001 000s
 		if((opcode & 0xFFFE) == 0x0010) {
 			_state.PC = PopStack();
+			// The popped level records how it was pushed (Pic18StackEntryKind)
+			uint8_t level = _state.STKPTR & Pic18StkptrBits::STKPTR_MASK;
 			if(opcode & 0x01) {
 				// Fast return: WREG/STATUS/BSR auto-restored from the fast register stack
-				_state.W = _state.WREG_S;
-				_state.STATUS = _state.STATUS_S;
-				_state.BSR = _state.BSR_S & 0x0F;
+				_state.W = _state.FastW[level];
+				_state.STATUS = _state.FastStatus[level];
+				_state.BSR = _state.FastBsr[level] & 0x0F;
 				_state.Data[Pic18Sfr::STATUS & 0xFFF] = _state.STATUS;
 				_state.Data[Pic18Sfr::BSR & 0xFFF] = _state.BSR;
 			}
-			_state.INTCON |= Pic18IntconBits::GIE;
+			// RETFIE re-enables the level that was disabled on entry: GIEH for a
+			// high-priority (or legacy) ISR, GIEL for a low-priority ISR. A level
+			// pushed by CALL/PUSH has no interrupt context — treat as high/legacy.
+			if(_state.StackEntryKind[level] == Pic18StackEntryKind::LowInt) {
+				_state.INTCON |= Pic18IntconBits::PEIE;
+			} else {
+				_state.INTCON |= Pic18IntconBits::GIE;
+			}
+			_state.Data[Pic18Sfr::INTCON & 0xFFF] = _state.INTCON;
+			_state.InterruptPending = true;  // INTCON changed, re-evaluate pending sources
 			return 2;
 		}
 		// RETURN: 0000 0000 0001 001s
@@ -802,9 +852,10 @@ void Pic18Cpu::Serialize(Serializer& s)
 	SV(_state.PRODL);
 	SV(_state.PCLATU);
 	SV(_state.PCLATH);
-	SV(_state.WREG_S);
-	SV(_state.STATUS_S);
-	SV(_state.BSR_S);
+	SVArray(_state.StackEntryKind, 31);
+	SVArray(_state.FastW, 31);
+	SVArray(_state.FastStatus, 31);
+	SVArray(_state.FastBsr, 31);
 	SV(_state.CycleCount);
 	SV(_state.PspIbf);
 	SV(_state.PspObf);

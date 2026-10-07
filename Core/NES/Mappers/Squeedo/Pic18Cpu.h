@@ -89,8 +89,9 @@ private:
 	}
 
 	// Stack operations
-	void PushStack(uint32_t value);
+	void PushStack(uint32_t value, uint8_t kind = Pic18StackEntryKind::Normal);
 	uint32_t PopStack();
+	void EnterInterrupt(uint32_t vector, uint8_t kind);
 
 	// Instruction implementations (return cycles consumed)
 	int DecodeAndExecute(uint16_t opcode);

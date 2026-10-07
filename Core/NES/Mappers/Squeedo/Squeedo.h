@@ -334,6 +334,10 @@ protected:
 		SV(_picState.STKPTR);
 		SV(_picState.RCON);
 		SVArray(_picState.Stack, 31);
+		SVArray(_picState.StackEntryKind, 31);
+		SVArray(_picState.FastW, 31);
+		SVArray(_picState.FastStatus, 31);
+		SVArray(_picState.FastBsr, 31);
 		SVArray(_picState.FSR, 3);
 		SV(_picState.TBLPTR);
 		SV(_picState.TABLAT);
