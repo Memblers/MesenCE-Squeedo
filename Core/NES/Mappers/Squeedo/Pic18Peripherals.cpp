@@ -1,8 +1,10 @@
 #include "pch.h"
 #include "NES/Mappers/Squeedo/Pic18Peripherals.h"
 #include "NES/Mappers/Squeedo/Pic18Cpu.h"
+#include "NES/Mappers/Squeedo/Pic18CrashDiag.h"
 #include "NES/NesConsole.h"
 #include "NES/NesCpu.h"
+#include "Shared/Emulator.h"
 
 Pic18Peripherals::Pic18Peripherals(Pic18CpuState& state, NesConsole* console)
 	: _state(state), _console(console)
@@ -22,13 +24,13 @@ uint8_t Pic18Peripherals::GetTimer0PrescalerDiv()
 uint8_t Pic18Peripherals::GetTimer1PrescalerDiv()
 {
 	uint8_t t1ckps = (_state.Data[Pic18Sfr::T1CON & 0xFFF] & Pic18T1conBits::T1CKPS_MASK) >> 4;
-	return (uint8_t)(1 << (t1ckps * 2));  // 00=1:1, 01=1:2, 10=1:4, 11=1:8
+	return (uint8_t)(1 << t1ckps);  // 00=1:1, 01=1:2, 10=1:4, 11=1:8
 }
 
 uint8_t Pic18Peripherals::GetTimer3PrescalerDiv()
 {
 	uint8_t t3ckps = (_state.Data[Pic18Sfr::T3CON & 0xFFF] & Pic18T3conBits::T3CKPS_MASK) >> 4;
-	return (uint8_t)(1 << (t3ckps * 2));
+	return (uint8_t)(1 << t3ckps);  // 00=1:1, 01=1:2, 10=1:4, 11=1:8
 }
 
 void Pic18Peripherals::ClockTimers(int cycles)
@@ -143,12 +145,14 @@ uint8_t Pic18Peripherals::NesRead(uint8_t regAddr)
 	_state.Data[Pic18Sfr::PIR1 & 0xFFF] |= Pic18Pir1Bits::PSPIF;
 	_state.InterruptPending = true;
 
+	Pic18CrashDiag::RecordPspAccess(regAddr & 0x1F, _state.PspPortDOutput, false);
 	return _state.PspPortDOutput;
 }
 
 void Pic18Peripherals::NesWrite(uint8_t regAddr, uint8_t value)
 {
 	// NES writing to PSP
+	Pic18CrashDiag::RecordPspAccess(regAddr & 0x1F, value, true);
 	_pspLatchAddr = regAddr & 0x1F;
 	_pspWriteData = value;
 	if(_state.PspIbf) {
@@ -176,9 +180,26 @@ void Pic18Peripherals::UartReceiveByte(uint8_t byte)
 		_rxDataReady = true;
 	}
 }
-
+// FSR-indirect registers (INDF/POSTINC/POSTDEC/PREINC/PLUSW) resolve through
+// the FSR value and recurse into ReadSfr/WriteSfr. If FSR itself points at an
+// indirect register (garbage FSR), the side effect resolves to itself and the
+// recursion overflows the native stack (crash dump 2026-10-12: FSR2=$FDD =
+// POSTINC2 -> self-recursion). This guard bounds that chain to one real
+// resolution; deeper re-entry degrades to a raw Data[] access.
+namespace {
+struct SfrRecursionGuard {
+        uint8_t& depth;
+        explicit SfrRecursionGuard(uint8_t& d) : depth(d) { ++depth; }
+        ~SfrRecursionGuard() { --depth; }
+};
+}
 uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 {
+	addr &= 0xFFF;  // PIC18 uses 12-bit addressing
+	SfrRecursionGuard guard(_sfrRecursionDepth);
+	if(_sfrRecursionDepth > 4) {
+		return _state.Data[addr];
+	}
 	switch(addr) {
 	// Timer reads with latching
 	case Pic18Sfr::TMR0L:
@@ -296,6 +317,19 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 
 void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 {
+	addr &= 0xFFF;  // PIC18 uses 12-bit addressing (BSR<<8|f wraps into $F00-$FFF SFR space)
+	SfrRecursionGuard guard(_sfrRecursionDepth);
+	if(_sfrRecursionDepth > 4) {
+		_state.Data[addr] = value;
+		return;
+	}
+	// Debug write hook: raised for the SFR access itself and, via the indirect cases below
+	// (POSTINC/INDF/etc. recurse into WriteSfr), for the resolved target address too.
+	if(_emu && !Pic18Dbg::InWriteHook()) {
+		Pic18Dbg::InWriteHook() = true;
+		_emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
+		Pic18Dbg::InWriteHook() = false;
+	}
 	switch(addr) {
 	case Pic18Sfr::TMR0L:
 		_state.Data[Pic18Sfr::TMR0L & 0xFFF] = value;

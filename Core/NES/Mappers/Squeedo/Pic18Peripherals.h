@@ -6,6 +6,7 @@
 
 class Pic18Cpu;
 class NesConsole;
+class Emulator;
 
 class Pic18Peripherals : public ISerializable
 {
@@ -13,22 +14,24 @@ private:
 	Pic18CpuState& _state;
 	Pic18Cpu* _cpu = nullptr;
 	NesConsole* _console = nullptr;
+	Emulator* _emu = nullptr;  // non-owning; used to raise debug memory events
 
 	// PSP (Parallel Slave Port) state
 	uint8_t _pspLatchAddr = 0;    // Latched A0-A4 from NES address
 	uint8_t _pspWriteData = 0;    // Data written by NES
 	bool _pspReadStrobe = false;  // NES read active
 	bool _pspWriteStrobe = false; // NES write active
+        uint8_t _sfrRecursionDepth = 0; // FSR-indirect reentrancy guard
 
-	// Timer0 state (16-bit)
-	uint16_t _tmr0Prescaler = 0;
-	uint16_t _tmr0PrescalerCounter = 0;  // uint16 needed for bulk arithmetic (prescaler up to 256)
+        // Timer0 state (16-bit)
+        uint16_t _tmr0Prescaler = 0;
+        uint16_t _tmr0PrescalerCounter = 0;
 
-	// Timer1 state (16-bit)
-	uint16_t _tmr1PrescalerCounter = 0;
+        // Timer1 state (16-bit)
+        uint16_t _tmr1PrescalerCounter = 0;
 
-	// Timer3 state (16-bit)
-	uint16_t _tmr3PrescalerCounter = 0;
+        // Timer3 state (16-bit)
+        uint16_t _tmr3PrescalerCounter = 0;
 
 	// UART state
 	bool _txBusy = false;
@@ -60,6 +63,7 @@ public:
 	Pic18Peripherals(Pic18CpuState& state, NesConsole* console);
 
 	void SetCpu(Pic18Cpu* cpu) { _cpu = cpu; }
+	void SetEmulator(Emulator* emu) { _emu = emu; }
 	void SetIrqCallback(std::function<void(bool)> callback) { _irqCallback = callback; }
 	void SetTxCallback(std::function<void(uint8_t)> callback) { _txCallback = callback; }
 

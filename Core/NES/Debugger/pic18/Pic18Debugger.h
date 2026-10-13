@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "Debugger/IDebugger.h"
+#include "NES/Debugger/pic18/Pic18TraceLogger.h"
 #include "NES/Mappers/Squeedo/Pic18Types.h"
 
 class NesConsole;
@@ -20,7 +21,7 @@ private:
 
 	unique_ptr<BreakpointManager> _breakpointManager;
 	unique_ptr<CallstackManager> _callstackManager;
-	unique_ptr<ITraceLogger> _traceLogger;
+	unique_ptr<Pic18TraceLogger> _traceLogger;
 
 	uint16_t _prevOpCode = 0;
 	uint32_t _prevPc = 0;

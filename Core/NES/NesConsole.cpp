@@ -407,6 +407,10 @@ AddressInfo NesConsole::GetAbsoluteAddress(AddressInfo& relAddress)
 	} else if(relAddress.Type == MemoryType::Pic18DataRam || relAddress.Type == MemoryType::Pic18SfrRam) {
 		//PIC18 data/SFR addresses are absolute (flat 4KB data space)
 		return { relAddress.Address & 0xFFF, relAddress.Type };
+	} else if(relAddress.Type == MemoryType::Pic18ProgramRom) {
+		//PIC18 program ROM addresses are absolute; pass through so Lua exec callbacks
+		//registered on Pic18ProgramRom match (they never resolve through the NES mapper).
+		return { relAddress.Address, MemoryType::Pic18ProgramRom };
 	} else {
 		return _mapper->GetPpuAbsoluteAddress(relAddress.Address);
 	}

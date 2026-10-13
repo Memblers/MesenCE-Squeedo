@@ -5,16 +5,25 @@
 #include "Utilities/Serializer.h"
 
 class Pic18Peripherals;
+class Emulator;
 
 class Pic18Cpu : public ISerializable
 {
 private:
 	Pic18CpuState& _state;
 	Pic18Peripherals* _peripherals = nullptr;
+	Emulator* _emu = nullptr;  // non-owning; used to raise debug memory events
+
+	// Interrupt-entry tracking for the debugger callstack (transient, not serialized).
+	// Set by EnterInterrupt, consumed by Pic18Debugger to push an Irq frame so RETFIE
+	// pops a paired frame instead of draining an unrelated caller frame.
+	bool _irqEntered = false;
+	uint32_t _irqReturnPc = 0;
+	uint32_t _irqVector = 0;
 
 	// Inline helpers
 	uint16_t ResolveAddr(uint8_t f, bool accessBank);
-
+        void SkipInstruction();
 	__forceinline uint8_t GetF(uint16_t addr, bool accessBank)
 	{
 		uint16_t fullAddr = accessBank ? GetAccessBankAddr(addr) : ((uint16_t)(_state.BSR << 8) | addr);
@@ -101,6 +110,21 @@ public:
 
 	void SetPeripherals(Pic18Peripherals* peripherals) { _peripherals = peripherals; }
 	Pic18Peripherals* GetPeripherals() { return _peripherals; }
+	void SetEmulator(Emulator* emu) { _emu = emu; }
+
+	// Returns true once after each interrupt entry, filling returnPc (the preempted
+	// instruction's PC, i.e. the return address pushed to the hardware stack) and the
+	// interrupt vector. Used by the debugger to keep the callstack in sync with ISRs.
+	bool ConsumeInterruptEntered(uint32_t& returnPc, uint32_t& vector)
+	{
+		if(_irqEntered) {
+			_irqEntered = false;
+			returnPc = _irqReturnPc;
+			vector = _irqVector;
+			return true;
+		}
+		return false;
+	}
 
 	// Execute PIC cycles, return actual cycles consumed
 	int Run(int cyclesToRun);

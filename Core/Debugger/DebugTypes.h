@@ -155,6 +155,11 @@ struct CodeLineData
 	char Comment[1000];
 };
 
+// This struct is marshaled to/from the UI as [In, Out] InteropCodeLineData[]. The two
+// layouts must match byte-for-byte or the marshaler's array copy-back corrupts the
+// managed heap. Keep sizeof in sync with UI/Debugger/Disassembly/CodeLineData.cs.
+static_assert(sizeof(CodeLineData) == 2048, "CodeLineData size changed - update InteropCodeLineData in the UI (CodeLineData.cs)");
+
 enum class TilemapDisplayMode
 {
 	Default,
@@ -294,6 +299,10 @@ struct StackFrameInfo
 	AddressInfo AbsReturn;
 	StackFrameFlags Flags;
 };
+
+// Marshaled to/from the UI as [In, Out] StackFrameInfo[]. Keep sizeof in sync with the
+// managed StackFrameInfo in UI/Interop/DebugApi.cs.
+static_assert(sizeof(StackFrameInfo) == 44, "StackFrameInfo size changed - update StackFrameInfo in the UI (DebugApi.cs)");
 
 enum class DebugEventType
 {

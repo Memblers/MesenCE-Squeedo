@@ -5,6 +5,7 @@
 #include "NES/Mappers/Squeedo/Pic18Peripherals.h"
 #include "NES/Mappers/Squeedo/SerialPortBridge.h"
 #include "NES/Mappers/Squeedo/Pic18Types.h"
+#include "NES/Mappers/Squeedo/Pic18CrashDiag.h"
 #include "NES/Mappers/Squeedo/IntelHexParser.h"
 #include "NES/Mappers/Homebrew/FlashSST39SF040.h"
 #include "NES/NesCpu.h"
@@ -91,6 +92,12 @@ protected:
 		_picPeripherals.reset(new Pic18Peripherals(_picState, _console));
 		_picCpu->SetPeripherals(_picPeripherals.get());
 		_picPeripherals->SetCpu(_picCpu.get());
+		_picCpu->SetEmulator(_emu);
+		_picPeripherals->SetEmulator(_emu);
+
+		// Crash diagnostics: always-on PIC activity ring + AV dump-on-crash
+		Pic18CrashDiag::Init();
+		Pic18CrashDiag::SetCpuState(&_picState);
 
 		// IRQ callback: PIC RA5 → NES /IRQ
 		_picPeripherals->SetIrqCallback([this](bool active) {

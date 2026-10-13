@@ -4,6 +4,31 @@
 #include "Utilities/ISerializable.h"
 #include "Utilities/Serializer.h"
 
+// Debug-only bounds checks for the PIC18 core's fixed-size arrays (Data[4096],
+// Program[0x200000], Stack[31], FastW/Status/Bsr[31]). Every index is masked/clamped
+// before use, so these should never fire — they exist to catch, at the exact host
+// instruction, any future regression that drops a mask and writes out of bounds (which
+// would corrupt the managed heap). Release builds compile this to nothing.
+#if defined(_DEBUG)
+	#if defined(_MSC_VER)
+		#define PIC_BOUNDS_BREAK() __debugbreak()
+	#else
+		#define PIC_BOUNDS_BREAK() __builtin_trap()
+	#endif
+	#define PIC_BOUNDS_ASSERT(idx, count) do { if(!((idx) < (count))) { PIC_BOUNDS_BREAK(); } } while(0)
+#else
+	#define PIC_BOUNDS_ASSERT(idx, count) ((void)0)
+#endif
+
+// Reentrancy guard for the PIC18 debug WRITE hooks. A Lua write callback that writes
+// PIC18 memory re-enters the hooked WriteData/WriteSfr via Squeedo::DebugWriteData; without
+// this guard that recurses without bound (stack overflow). Nested writes still apply their
+// side effects but do not re-fire the hook. Read hooks don't need this: debug reads use
+// PeekData, which raises no hook. Function-local static in an inline function (C++11-safe).
+namespace Pic18Dbg {
+	inline bool& InWriteHook() { static bool inHook = false; return inHook; }
+}
+
 // PIC18F4620 Special Function Register addresses in data memory space
 namespace Pic18Sfr
 {

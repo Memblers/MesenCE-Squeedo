@@ -76,7 +76,17 @@ void Pic18Debugger::ProcessInstruction()
 	// Callstack tracking: check PREVIOUS instruction
 	uint32_t byteAddr = pc * 2;
 	AddressInfo destAddr = { (int32_t)byteAddr, MemoryType::Pic18ProgramRom };
-	if(Pic18DisUtils::IsJumpToSub(_prevOpCode)) {
+	uint32_t irqReturnPc = 0, irqVector = 0;
+	if(_cpu->ConsumeInterruptEntered(irqReturnPc, irqVector)) {
+		// An interrupt was taken between the previous instruction and this one: the
+		// hardware pushed the return PC and jumped to the vector. The previous "instruction"
+		// was preempted and never executed, so skip normal prev-opcode tracking. Push an
+		// Irq frame so the ISR's RETFIE pops a paired frame (matching the hardware push).
+		AddressInfo srcAddress = { (int32_t)(irqReturnPc * 2), MemoryType::Pic18ProgramRom };
+		AddressInfo irqDestAddr = { (int32_t)(irqVector * 2), MemoryType::Pic18ProgramRom };
+		AddressInfo retAddress = { (int32_t)(irqReturnPc * 2), MemoryType::Pic18ProgramRom };
+		_callstackManager->Push(srcAddress, irqReturnPc * 2, irqDestAddr, irqVector * 2, retAddress, irqReturnPc * 2, state.STKPTR, StackFrameFlags::Irq);
+	} else if(Pic18DisUtils::IsJumpToSub(_prevOpCode)) {
 		// CALL/RCALL — push to callstack
 		uint32_t prevByteAddr = _prevPc * 2;
 		uint32_t opSize = Pic18DisUtils::GetInstructionSize(_prevOpCode);
@@ -106,6 +116,16 @@ void Pic18Debugger::ProcessInstruction()
 
 	_disassembler->BuildCache(addrInfo, 0, CpuType::Pic18);
 
+	if(_traceLogger->IsEnabled()) {
+		Pic18TraceState traceState = {};
+		traceState.PC = pc;
+		traceState.W = state.W;
+		traceState.STATUS = state.STATUS;
+		traceState.BSR = state.BSR;
+		DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addrInfo, byteAddr, 0, CpuType::Pic18);
+		_traceLogger->Log(traceState, disInfo, operation, addrInfo);
+	}
+
 	_step->ProcessCpuExec();
 
 	_debugger->ProcessBreakConditions(CpuType::Pic18, *_step.get(), _breakpointManager.get(), operation, addrInfo);
@@ -117,10 +137,28 @@ void Pic18Debugger::ProcessInstruction()
 
 void Pic18Debugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType opType)
 {
+	uint32_t dataAddr = addr & 0xFFF;
+	MemoryType memType = dataAddr >= Pic18Sfr::SfrBase ? MemoryType::Pic18SfrRam : MemoryType::Pic18DataRam;
+	AddressInfo addressInfo = { (int32_t)dataAddr, memType };
+	MemoryOperationInfo operation(dataAddr, value, opType, memType);
+	InstructionProgress.LastMemOperation = operation;
+
+	if(_traceLogger->IsEnabled()) {
+		_traceLogger->LogNonExec(operation, addressInfo);
+	}
 }
 
 void Pic18Debugger::ProcessWrite(uint32_t addr, uint8_t value, MemoryOperationType opType)
 {
+	uint32_t dataAddr = addr & 0xFFF;
+	MemoryType memType = dataAddr >= Pic18Sfr::SfrBase ? MemoryType::Pic18SfrRam : MemoryType::Pic18DataRam;
+	AddressInfo addressInfo = { (int32_t)dataAddr, memType };
+	MemoryOperationInfo operation(dataAddr, value, opType, memType);
+	InstructionProgress.LastMemOperation = operation;
+
+	if(_traceLogger->IsEnabled()) {
+		_traceLogger->LogNonExec(operation, addressInfo);
+	}
 }
 
 int32_t Pic18Debugger::GetEffectiveStepCount(int32_t stepCount)

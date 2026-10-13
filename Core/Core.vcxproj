@@ -26,6 +26,7 @@
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Types.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Cpu.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Pic18Peripherals.h" />
+    <ClInclude Include="NES\Mappers\Squeedo\Pic18CrashDiag.h" />
     <ClInclude Include="NES\Mappers\Squeedo\SerialPortBridge.h" />
     <ClInclude Include="NES\Mappers\Squeedo\IntelHexParser.h" />
     <ClInclude Include="NES\Mappers\Squeedo\Squeedo.h" />
@@ -899,6 +900,7 @@
     <ClCompile Include="NES\Mappers\Homebrew\Rainbow.cpp" />
     <ClCompile Include="NES\Mappers\Squeedo\Pic18Cpu.cpp" />
     <ClCompile Include="NES\Mappers\Squeedo\Pic18Peripherals.cpp" />
+    <ClCompile Include="NES\Mappers\Squeedo\Pic18CrashDiag.cpp" />
     <ClCompile Include="NES\Mappers\Squeedo\SerialPortBridge.cpp" />
     <ClCompile Include="NES\Debugger\pic18\Pic18Debugger.cpp" />
     <ClCompile Include="NES\Debugger\pic18\Pic18DisUtils.cpp" />

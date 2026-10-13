@@ -40,8 +40,11 @@ public:
 	void Log(string& log)
 	{
 		_outputBuffer += log + '\n';
-		if(_outputBuffer.size() > 32768) {
+		// Flush incrementally so the trace tail reaches the OS and survives a crash.
+		// A large buffer would lose the rows closest to the crash (the ones we need most).
+		if(_outputBuffer.size() > 1024) {
 			_outputFile << _outputBuffer;
+			_outputFile.flush();
 			_outputBuffer.clear();
 		}
 	}

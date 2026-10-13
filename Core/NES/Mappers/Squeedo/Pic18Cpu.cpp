@@ -1,6 +1,8 @@
 #include "pch.h"
 #include "NES/Mappers/Squeedo/Pic18Cpu.h"
 #include "NES/Mappers/Squeedo/Pic18Peripherals.h"
+#include "NES/Mappers/Squeedo/Pic18CrashDiag.h"
+#include "Shared/Emulator.h"
 
 Pic18Cpu::Pic18Cpu(Pic18CpuState& state) : _state(state)
 {
@@ -30,6 +32,7 @@ void Pic18Cpu::Reset()
 	_state.PspObf = false;
 	_state.PspPortDOutput = 0;
 	_state.InterruptPending = false;
+	_irqEntered = false;
 
 	memset(_state.Stack, 0, sizeof(_state.Stack));
 	memset(_state.StackEntryKind, 0, sizeof(_state.StackEntryKind));
@@ -55,6 +58,7 @@ void Pic18Cpu::PushStack(uint32_t value, uint8_t kind)
 		_state.STKPTR |= (1 << Pic18StkptrBits::STKFUL);
 		return;
 	}
+	PIC_BOUNDS_ASSERT(_state.STKPTR & Pic18StkptrBits::STKPTR_MASK, 31);
 	_state.Stack[_state.STKPTR & Pic18StkptrBits::STKPTR_MASK] = value & 0x1FFFFF;
 	_state.StackEntryKind[_state.STKPTR & Pic18StkptrBits::STKPTR_MASK] = kind;
 	_state.STKPTR++;
@@ -66,9 +70,15 @@ void Pic18Cpu::EnterInterrupt(uint32_t vector, uint8_t kind)
 	// one shadow per stack level (the return address is pushed to this level)
 	uint8_t level = _state.STKPTR & Pic18StkptrBits::STKPTR_MASK;
 	if(level > 30) level = 30;
+	PIC_BOUNDS_ASSERT(level, 31);
 	_state.FastW[level] = _state.W;
 	_state.FastStatus[level] = _state.STATUS;
 	_state.FastBsr[level] = _state.BSR;
+
+	// Record the entry so the debugger can push a matching callstack frame
+	_irqReturnPc = _state.PC;
+	_irqVector = vector;
+	_irqEntered = true;
 
 	PushStack(_state.PC, kind);
 	_state.PC = vector;
@@ -97,11 +107,16 @@ uint32_t Pic18Cpu::PopStack()
 uint8_t Pic18Cpu::ReadData(uint16_t addr)
 {
 	addr &= 0xFFF;
+	PIC_BOUNDS_ASSERT(addr, 4096);
 	// Fast path: GPR (below SFR region) — direct array access, no virtual dispatch
+	uint8_t v;
 	if(addr >= Pic18Sfr::SfrBase && _peripherals) {
-		return _peripherals->ReadSfr(addr);
+		v = _peripherals->ReadSfr(addr);
+	} else {
+		v = _state.Data[addr];
 	}
-	return _state.Data[addr];
+	if(_emu) _emu->ProcessMemoryRead<CpuType::Pic18>(addr, v, MemoryOperationType::Read);
+	return v;
 }
 
 uint8_t Pic18Cpu::PeekData(uint16_t addr)
@@ -116,9 +131,21 @@ uint8_t Pic18Cpu::PeekData(uint16_t addr)
 void Pic18Cpu::WriteData(uint16_t addr, uint8_t value)
 {
 	addr &= 0xFFF;
-	// Fast path: GPR (below SFR region) — direct array write, no virtual dispatch
-	if(addr >= Pic18Sfr::SfrBase && _peripherals) {
-		_peripherals->WriteSfr(addr, value);
+	PIC_BOUNDS_ASSERT(addr, 4096);
+	if(addr >= Pic18Sfr::SfrBase) {
+		// SFR writes: WriteSfr raises the debug write hook (its top handles both the
+		// direct SFR access and the resolved target of indirect POSTINC/INDF writes).
+		if(_peripherals) {
+			_peripherals->WriteSfr(addr, value);
+		}
+		_state.Data[addr] = value;
+		return;
+	}
+	// GPR direct write (hook first so a Lua callback can override the value)
+	if(_emu && !Pic18Dbg::InWriteHook()) {
+		Pic18Dbg::InWriteHook() = true;
+		_emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
+		Pic18Dbg::InWriteHook() = false;
 	}
 	_state.Data[addr] = value;
 }
@@ -126,6 +153,27 @@ void Pic18Cpu::WriteData(uint16_t addr, uint8_t value)
 uint8_t Pic18Cpu::ReadProgram(uint32_t addr)
 {
 	return _state.Program[addr & 0x1FFFFF];
+}
+
+// Skip the instruction at the current PC (used by the skip-if instructions).
+// On real PIC18 hardware a skip jumps over the WHOLE next instruction, even
+// 2-word ones (MOVFF/LFSR/CALL/GOTO). A naive 1-word skip lands on the second
+// word, which executes as a phantom opcode: 0xF0xx (usually benign) but an
+// LFSR's second word is 0x0xxx = the specials range = PUSH/POP/RETFIE/
+// RETURN/RESET! (crash class 2026-10-12: phantom RETFIE/PUSH wrecking the
+// hardware stack). Match GetInstructionSize's 2-word formats here.
+void Pic18Cpu::SkipInstruction()
+{
+	uint8_t lo = ReadProgram(_state.PC * 2);
+	uint8_t hi = ReadProgram(_state.PC * 2 + 1);
+	uint16_t op = ((uint16_t)hi << 8) | lo;
+	if((op & 0xF000) == 0xC000 ||          // MOVFF
+	   (op & 0xFF00) == 0xEE00 ||          // LFSR
+	   (op & 0xFE00) == 0xEC00 ||          // CALL k,s
+	   (op & 0xFF00) == 0xEF00) {          // GOTO
+		_state.PC++;
+	}
+	_state.PC++;
 }
 
 void Pic18Cpu::WriteProgram(uint32_t addr, uint8_t value)
@@ -264,6 +312,7 @@ int Pic18Cpu::ExecuteInstruction()
 	uint8_t lo = ReadProgram(_state.PC * 2);
 	uint8_t hi = ReadProgram(_state.PC * 2 + 1);
 	uint16_t opcode = ((uint16_t)hi << 8) | lo;
+	Pic18CrashDiag::RecordInstruction(_state.PC, opcode);
 
 	_state.PC++;
 	int cycles = DecodeAndExecute(opcode);
@@ -458,7 +507,18 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		uint16_t addr = ResolveAddr(f, !a);
 
 		switch((opcode >> 10) & 0x03) {
-		case 0: break; // NOP (unused: 0x2000-0x23FF)
+		case 0: // ADDWFC
+			val = ReadData(addr);
+			{ uint8_t cIn = (_state.STATUS & Pic18StatusBits::C) ? 1 : 0;
+			result = _state.W + val + cIn;
+			_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::DC | Pic18StatusBits::Z | Pic18StatusBits::OV | Pic18StatusBits::N);
+			if((uint16_t)_state.W + val + cIn > 0xFF) _state.STATUS |= Pic18StatusBits::C;
+			if((_state.W & 0x0F) + (val & 0x0F) + cIn > 0x0F) _state.STATUS |= Pic18StatusBits::DC;
+			if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
+			if((~(_state.W ^ val) & (_state.W ^ result)) & 0x80) _state.STATUS |= Pic18StatusBits::OV;
+			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
+			if(d) WriteData(addr, result); else _state.W = result; }
+			return 1;
 		case 1: // ADDWF
 			val = ReadData(addr);
 			result = _state.W + val;
@@ -475,7 +535,7 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			val = ReadData(addr);
 			result = val - 1;
 			if(d) WriteData(addr, result); else _state.W = result;
-			if(result == 0) { _state.PC++; return 2; }
+			if(result == 0) { SkipInstruction(); return 2; }
 			return 1;
 		}
 		break;
@@ -520,7 +580,7 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			val = ReadData(addr);
 			result = val + 1;
 			if(d) WriteData(addr, result); else _state.W = result;
-			if(result == 0) { _state.PC++; return 2; }
+			if(result == 0) { SkipInstruction(); return 2; }
 			return 1;
 		}
 		break;
@@ -551,13 +611,13 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			val = ReadData(addr);
 			result = val + 1;
 			if(d) WriteData(addr, result); else _state.W = result;
-			if(result != 0) { _state.PC++; return 2; }
+			if(result != 0) { SkipInstruction(); return 2; }
 			return 1;
 		case 3: // DCFSNZ
 			val = ReadData(addr);
 			result = val - 1;
 			if(d) WriteData(addr, result); else _state.W = result;
-			if(result != 0) { _state.PC++; return 2; }
+			if(result != 0) { SkipInstruction(); return 2; }
 			return 1;
 		}
 		break;
@@ -601,36 +661,49 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
 			if(d) WriteData(addr, result); else _state.W = result; }
 			return 1;
-		case 3: break; // NOP (unused: 0x5C00-0x5FFF)
+		case 3: // SUBWF
+			val = ReadData(addr);
+			{ result = val - _state.W;
+			_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::DC | Pic18StatusBits::Z | Pic18StatusBits::OV | Pic18StatusBits::N);
+			if((uint16_t)val >= (uint16_t)_state.W) _state.STATUS |= Pic18StatusBits::C;
+			if((val & 0x0F) >= (_state.W & 0x0F)) _state.STATUS |= Pic18StatusBits::DC;
+			if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
+			if(((val ^ _state.W) & (val ^ result)) & 0x80) _state.STATUS |= Pic18StatusBits::OV;
+			if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
+			if(d) WriteData(addr, result); else _state.W = result; }
+			return 1;
 		}
 		break;
 	}
 
 	// ----------------------------------------------------------------
-	// 0x6: SETF, CPFSEQ, TSTFSZ, CPFSGT, CPFSLT, CLRF, NEGF, MOVWF
+	// 0x6: CPFSEQ, TSTFSZ, CPFSGT, CPFSLT, SETF, CLRF, NEGF, MOVWF
+	// (sub-op = bits 11:9. Table verified against XC8 emissions: CLRF=0x6Axx,
+	// MOVWF=0x6Exx, CPFSGT=0x64xx. The old table had SETF at index 0 which
+	// shifted every compare-skip up by one -> CPFSGT decoded as TSTFSZ, etc.)
 	// ----------------------------------------------------------------
 	case 0x6: {
 		bool a = (opcode >> 8) & 1;
 		uint16_t addr = ResolveAddr(f, !a);
 
 		switch((opcode >> 9) & 0x07) {
-		case 0: // SETF
+		case 0: // CPFSEQ
+			val = ReadData(addr);
+			if(val == _state.W) { SkipInstruction(); return 2; }
+			return 1;
+		case 1: // TSTFSZ
+			if(ReadData(addr) == 0) { SkipInstruction(); return 2; }
+			return 1;
+		case 2: // CPFSGT
+			val = ReadData(addr);
+			if(val > _state.W) { SkipInstruction(); return 2; }
+			return 1;
+		case 3: // CPFSLT
+			val = ReadData(addr);
+			if(val < _state.W) { SkipInstruction(); return 2; }
+			return 1;
+		case 4: // SETF
 			WriteData(addr, 0xFF);
-			return 1;
-		case 1: // CPFSEQ
-			val = ReadData(addr);
-			if(val == _state.W) { _state.PC++; return 2; }
-			return 1;
-		case 2: // TSTFSZ
-			if(ReadData(addr) == 0) { _state.PC++; return 2; }
-			return 1;
-		case 3: // CPFSGT
-			val = ReadData(addr);
-			if(val > _state.W) { _state.PC++; return 2; }
-			return 1;
-		case 4: // CPFSLT
-			val = ReadData(addr);
-			if(val < _state.W) { _state.PC++; return 2; }
 			return 1;
 		case 5: // CLRF
 			WriteData(addr, 0);
@@ -699,7 +772,7 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		bool a = !((opcode >> 8) & 1);
 		uint16_t addr = ResolveAddr(f, a);
 		uint8_t mask = 1 << b;
-		if(ReadData(addr) & mask) { _state.PC++; return 2; }
+		if(ReadData(addr) & mask) { SkipInstruction(); return 2; }
 		return 1;
 	}
 
@@ -711,7 +784,7 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		bool a = !((opcode >> 8) & 1);
 		uint16_t addr = ResolveAddr(f, a);
 		uint8_t mask = 1 << b;
-		if(!(ReadData(addr) & mask)) { _state.PC++; return 2; }
+		if(!(ReadData(addr) & mask)) { SkipInstruction(); return 2; }
 		return 1;
 	}
 
@@ -763,7 +836,8 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			uint16_t secondWord = ((uint16_t)hi2 << 8) | lo2;
 			// 20-bit target: k<19:8> from second word, k<7:0> from first word
 			uint32_t dest = ((uint32_t)(secondWord & 0xFFF) << 8) | (opcode & 0xFF);
-			PushStack(_state.PC);
+			_state.PC++;                       // skip the second word first
+			PushStack(_state.PC);              // return = word AFTER the 2-word CALL
 			_state.PC = dest;
 			return 2;
 		}
