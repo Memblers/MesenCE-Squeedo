@@ -394,7 +394,7 @@ public:
 	// Debugger access to the PIC18 data space (GPR + SFRs).
 	// Reads are side-effect-free (no FSR auto-inc, no timer latches, no RCREG pop).
 	uint8_t DebugReadData(uint32_t addr) { return _picCpu ? _picCpu->PeekData((uint16_t)addr) : 0; }
-	void DebugWriteData(uint32_t addr, uint8_t value) { if(_picCpu) { _picCpu->WriteData((uint16_t)addr, value); } }
+	void DebugWriteData(uint32_t addr, uint8_t value) { if(_picCpu) { _picCpu->WriteData((uint16_t)addr, value, true); } }
 };
 
 // Static member definition

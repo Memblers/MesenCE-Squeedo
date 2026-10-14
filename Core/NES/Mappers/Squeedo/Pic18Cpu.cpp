@@ -128,26 +128,30 @@ uint8_t Pic18Cpu::PeekData(uint16_t addr)
 	return _state.Data[addr];
 }
 
-void Pic18Cpu::WriteData(uint16_t addr, uint8_t value)
+bool Pic18Cpu::WriteData(uint16_t addr, uint8_t value, bool fromDebug)
 {
 	addr &= 0xFFF;
 	PIC_BOUNDS_ASSERT(addr, 4096);
 	if(addr >= Pic18Sfr::SfrBase) {
 		// SFR writes: WriteSfr raises the debug write hook (its top handles both the
 		// direct SFR access and the resolved target of indirect POSTINC/INDF writes).
-		if(_peripherals) {
-			_peripherals->WriteSfr(addr, value);
+		bool written = _peripherals ? _peripherals->WriteSfr(addr, value, fromDebug) : true;
+		if(written) {
+			_state.Data[addr] = value;
 		}
-		_state.Data[addr] = value;
-		return;
+		return written;
 	}
 	// GPR direct write (hook first so a Lua callback can override the value)
 	if(_emu && !Pic18Dbg::InWriteHook()) {
 		Pic18Dbg::InWriteHook() = true;
-		_emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
+		bool processWrite = _emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
 		Pic18Dbg::InWriteHook() = false;
+		if(!processWrite && !fromDebug) {
+			return false;  // frozen address - drop the write
+		}
 	}
 	_state.Data[addr] = value;
+	return true;
 }
 
 uint8_t Pic18Cpu::ReadProgram(uint32_t addr)
@@ -322,6 +326,15 @@ int Pic18Cpu::ExecuteInstruction()
 
 int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 {
+	// Reset the peripherals' RMW cache at instruction boundaries so a
+	// read-modify-write's cached indirect target can't leak into the next
+	// instruction or an out-of-band (debugger/Lua) access.
+	struct RmwGuard {
+		Pic18Peripherals* p;
+		explicit RmwGuard(Pic18Peripherals* x) : p(x) { if(p) p->ResetRmwState(); }
+		~RmwGuard() { if(p) p->ResetRmwState(); }
+	} rmwGuard(_peripherals);
+
 	// Decode common fields
 	// Note: d/a bits differ by instruction type:
 	//   Byte-oriented: bit 9 = d (dest), bit 8 = a (access)
@@ -400,12 +413,10 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			return 2;
 		}
 
-		// MOVLB: 0000 0000 0001 kkkk (but NOT RETFIE/RETURN which are 0x10-0x13)
-		if((opcode & 0xFFF0) == 0x0010) {
-			if(opcode >= 0x0014) {
-				_state.BSR = opcode & 0x0F;
-				return 1;
-			}
+		// MOVLB: 0000 0001 0000 kkkk (verified against pic-as: MOVLB 5 -> 0x0105)
+		if((opcode & 0xFFF0) == 0x0100) {
+			_state.BSR = opcode & 0x0F;
+			return 1;
 		}
 
 		// Literal ops: high byte determines operation (0x08xx-0x0Fxx)
@@ -421,33 +432,19 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		case 0x0D: { uint16_t p = (uint16_t)_state.W * f; _state.PRODL = p; _state.PRODH = p >> 8; return 1; } // MULLW
 		}
 
-		// Byte-oriented in 0x0: ADDWFC (0x00xx-0x01xx), MULWF (0x02xx-0x03xx), DECF (0x04xx-0x07xx)
-		if(opc8 <= 0x07) {
+		// Byte-oriented in 0x0: MULWF (0x02xx-0x03xx), DECF (0x04xx-0x07xx)
+		// (ADDWFC is at 0x20xx, handled in case 0x2 — not here)
+		if(opc8 >= 0x02 && opc8 <= 0x07) {
 			bool d = (opcode >> 9) & 1;
 			bool a = (opcode >> 8) & 1;
 			uint16_t addr = ResolveAddr(f, !a);
 
 			if(opc8 <= 0x03) {
-				if(d) {
-					// MULWF (bit 9 fixed=1, bit 8 = a)
-					uint16_t prod = (uint16_t)_state.W * ReadData(addr);
-					_state.PRODL = prod & 0xFF;
-					_state.PRODH = prod >> 8;
-					return 1;
-				} else {
-					// ADDWFC d=0 (result -> W)
-					val = ReadData(addr);
-					{ uint8_t cIn = (_state.STATUS & Pic18StatusBits::C) ? 1 : 0;
-					result = _state.W + val + cIn;
-					_state.STATUS &= ~(Pic18StatusBits::C | Pic18StatusBits::DC | Pic18StatusBits::Z | Pic18StatusBits::OV | Pic18StatusBits::N);
-					if((uint16_t)_state.W + val + cIn > 0xFF) _state.STATUS |= Pic18StatusBits::C;
-					if((_state.W & 0x0F) + (val & 0x0F) + cIn > 0x0F) _state.STATUS |= Pic18StatusBits::DC;
-					if(result == 0) _state.STATUS |= Pic18StatusBits::Z;
-					if((~(_state.W ^ val) & (_state.W ^ result)) & 0x80) _state.STATUS |= Pic18StatusBits::OV;
-					if(result & 0x80) _state.STATUS |= Pic18StatusBits::N;
-					_state.W = result; }
-					return 1;
-				}
+				// MULWF (always writes to PRODL:PRODH)
+				uint16_t prod = (uint16_t)_state.W * ReadData(addr);
+				_state.PRODL = prod & 0xFF;
+				_state.PRODH = prod >> 8;
+				return 1;
 			} else {
 				// DECF
 				val = ReadData(addr);
@@ -677,30 +674,30 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 	}
 
 	// ----------------------------------------------------------------
-	// 0x6: CPFSEQ, TSTFSZ, CPFSGT, CPFSLT, SETF, CLRF, NEGF, MOVWF
-	// (sub-op = bits 11:9. Table verified against XC8 emissions: CLRF=0x6Axx,
-	// MOVWF=0x6Exx, CPFSGT=0x64xx. The old table had SETF at index 0 which
-	// shifted every compare-skip up by one -> CPFSGT decoded as TSTFSZ, etc.)
+	// 0x6: CPFSLT, CPFSEQ, CPFSGT, TSTFSZ, SETF, CLRF, NEGF, MOVWF
+	// (sub-op = bits 11:9. Verified against pic-as XC8 v3.00 output:
+	// CPFSLT=0x60xx, CPFSEQ=0x62xx, CPFSGT=0x64xx, TSTFSZ=0x66xx,
+	// SETF=0x68xx, CLRF=0x6Axx, NEGF=0x6Cxx, MOVWF=0x6Exx)
 	// ----------------------------------------------------------------
 	case 0x6: {
 		bool a = (opcode >> 8) & 1;
 		uint16_t addr = ResolveAddr(f, !a);
 
 		switch((opcode >> 9) & 0x07) {
-		case 0: // CPFSEQ
+		case 0: // CPFSLT (0x60xx)
+			val = ReadData(addr);
+			if(val < _state.W) { SkipInstruction(); return 2; }
+			return 1;
+		case 1: // CPFSEQ (0x62xx)
 			val = ReadData(addr);
 			if(val == _state.W) { SkipInstruction(); return 2; }
 			return 1;
-		case 1: // TSTFSZ
-			if(ReadData(addr) == 0) { SkipInstruction(); return 2; }
-			return 1;
-		case 2: // CPFSGT
+		case 2: // CPFSGT (0x64xx)
 			val = ReadData(addr);
 			if(val > _state.W) { SkipInstruction(); return 2; }
 			return 1;
-		case 3: // CPFSLT
-			val = ReadData(addr);
-			if(val < _state.W) { SkipInstruction(); return 2; }
+		case 3: // TSTFSZ (0x66xx)
+			if(ReadData(addr) == 0) { SkipInstruction(); return 2; }
 			return 1;
 		case 4: // SETF
 			WriteData(addr, 0xFF);
@@ -869,14 +866,14 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			int8_t rel8 = (int8_t)(opcode & 0xFF);
 			bool take = false;
 			switch(opc8 & 0x07) {
-			case 0: take = (_state.STATUS & Pic18StatusBits::C) != 0; break;   // BC
-			case 1: take = (_state.STATUS & Pic18StatusBits::OV) != 0; break;  // BNOV
-			case 2: take = (_state.STATUS & Pic18StatusBits::Z) != 0; break;   // BZ
-			case 3: take = (_state.STATUS & Pic18StatusBits::N) != 0; break;   // BN
-			case 4: take = !(_state.STATUS & Pic18StatusBits::C); break;       // BNC
-			case 5: take = !(_state.STATUS & Pic18StatusBits::OV); break;      // BNOV
-			case 6: take = !(_state.STATUS & Pic18StatusBits::Z); break;       // BNZ
-			case 7: take = !(_state.STATUS & Pic18StatusBits::N); break;       // BNN
+			case 0: take = (_state.STATUS & Pic18StatusBits::Z) != 0; break;   // BZ   (E0)
+			case 1: take = !(_state.STATUS & Pic18StatusBits::Z); break;       // BNZ  (E1)
+			case 2: take = (_state.STATUS & Pic18StatusBits::C) != 0; break;   // BC   (E2)
+			case 3: take = !(_state.STATUS & Pic18StatusBits::C); break;       // BNC  (E3)
+			case 4: take = (_state.STATUS & Pic18StatusBits::OV) != 0; break;  // BOV  (E4)
+			case 5: take = !(_state.STATUS & Pic18StatusBits::OV); break;      // BNOV (E5)
+			case 6: take = (_state.STATUS & Pic18StatusBits::N) != 0; break;   // BN   (E6)
+			case 7: take = !(_state.STATUS & Pic18StatusBits::N); break;       // BNN  (E7)
 			}
 			if(take) { _state.PC += rel8; return 2; }
 			return 1;

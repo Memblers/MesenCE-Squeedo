@@ -258,6 +258,63 @@ extern "C"
 		});
 	}
 
+	DllExport void __stdcall SetPic18CpuRegisters(Pic18CpuRegisters& in)
+	{
+		WrapDebuggerCall<void>([&](Debugger* dbg) -> void {
+			//Read the current state first (Pic18CpuState is ~2MB), apply the register
+			//changes, then write the whole state back.
+			auto cpu = std::make_unique<Pic18CpuState>();
+			dbg->GetCpuState(*cpu, CpuType::Pic18);
+			cpu->PC = in.PC;
+			cpu->W = in.W;
+			cpu->BSR = in.BSR & 0x0F;
+			cpu->STATUS = in.STATUS;
+			cpu->INTCON = in.INTCON;
+			cpu->STKPTR = in.STKPTR;
+			memcpy(cpu->FSR, in.FSR, sizeof(cpu->FSR));
+			cpu->TBLPTR = in.TBLPTR & 0x1FFFFF;
+			cpu->TABLAT = in.TABLAT;
+			cpu->PRODH = in.PRODH;
+			cpu->PRODL = in.PRODL;
+			cpu->PCLATU = in.PCLATU & 0x7F;
+			cpu->PCLATH = in.PCLATH;
+			cpu->RCON = in.RCON;
+			cpu->Data[Pic18Sfr::INTCON2 & 0xFFF] = in.INTCON2;
+			cpu->Data[Pic18Sfr::INTCON3 & 0xFFF] = in.INTCON3;
+			cpu->Data[Pic18Sfr::PIR1 & 0xFFF] = in.PIR1;
+			cpu->Data[Pic18Sfr::PIR2 & 0xFFF] = in.PIR2;
+			cpu->Data[Pic18Sfr::PIE1 & 0xFFF] = in.PIE1;
+			cpu->Data[Pic18Sfr::PIE2 & 0xFFF] = in.PIE2;
+
+			//Keep the Data[] mirrors of the live registers in sync so the memory
+			//viewer shows the same values as the status panel
+			cpu->Data[Pic18Sfr::STATUS & 0xFFF] = cpu->STATUS;
+			cpu->Data[Pic18Sfr::BSR & 0xFFF] = cpu->BSR;
+			cpu->Data[Pic18Sfr::INTCON & 0xFFF] = cpu->INTCON;
+			cpu->Data[Pic18Sfr::RCON & 0xFFF] = cpu->RCON;
+			cpu->Data[Pic18Sfr::STKPTR & 0xFFF] = cpu->STKPTR;
+			cpu->Data[Pic18Sfr::FSR0L & 0xFFF] = (uint8_t)(cpu->FSR[0] & 0xFF);
+			cpu->Data[Pic18Sfr::FSR0H & 0xFFF] = (uint8_t)((cpu->FSR[0] >> 8) & 0x0F);
+			cpu->Data[Pic18Sfr::FSR1L & 0xFFF] = (uint8_t)(cpu->FSR[1] & 0xFF);
+			cpu->Data[Pic18Sfr::FSR1H & 0xFFF] = (uint8_t)((cpu->FSR[1] >> 8) & 0x0F);
+			cpu->Data[Pic18Sfr::FSR2L & 0xFFF] = (uint8_t)(cpu->FSR[2] & 0xFF);
+			cpu->Data[Pic18Sfr::FSR2H & 0xFFF] = (uint8_t)((cpu->FSR[2] >> 8) & 0x0F);
+			cpu->Data[Pic18Sfr::TBLPTRL & 0xFFF] = (uint8_t)(cpu->TBLPTR & 0xFF);
+			cpu->Data[Pic18Sfr::TBLPTRH & 0xFFF] = (uint8_t)((cpu->TBLPTR >> 8) & 0xFF);
+			cpu->Data[Pic18Sfr::TBLPTRU & 0xFFF] = (uint8_t)((cpu->TBLPTR >> 16) & 0x1F);
+			cpu->Data[Pic18Sfr::TABLAT & 0xFFF] = cpu->TABLAT;
+			cpu->Data[Pic18Sfr::PRODH & 0xFFF] = cpu->PRODH;
+			cpu->Data[Pic18Sfr::PRODL & 0xFFF] = cpu->PRODL;
+			cpu->Data[Pic18Sfr::PCLATH & 0xFFF] = cpu->PCLATH;
+			cpu->Data[Pic18Sfr::PCLATU & 0xFFF] = cpu->PCLATU;
+
+			//INTCON/PIR/PIE may have changed - re-evaluate pending interrupts
+			cpu->InterruptPending = true;
+
+			dbg->SetCpuState(*cpu, CpuType::Pic18);
+		});
+	}
+
 	DllExport void __stdcall SetPpuState(BaseState& state, CpuType cpuType)
 	{
 		WithDebugger(void, SetPpuState(state, cpuType));

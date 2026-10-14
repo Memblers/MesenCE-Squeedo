@@ -623,11 +623,11 @@ namespace Mesen.Debugger.ViewModels
 					break;
 
 				case CpuType.Pic18:
-					addTag(cfg.ShowRegisters, "W:[A,2h] BSR:[B,2h] STKPTR:[SP,2h] ");
+					addTag(cfg.ShowRegisters, "W:[W,2h] BSR:[BSR,2h] STKPTR:[STKPTR,2h] ");
 					addTag(cfg.ShowStatusFlags, cfg.StatusFormat switch {
-						StatusFlagFormat.Hexadecimal => "S:[PS,h] ",
-						StatusFlagFormat.CompactText => "S:[PS] ",
-						StatusFlagFormat.Text or _ => "S:[PS,8] "
+						StatusFlagFormat.Hexadecimal => "STATUS:[PS,h] ",
+						StatusFlagFormat.CompactText => "STATUS:[PS] ",
+						StatusFlagFormat.Text or _ => "STATUS:[PS,5] "
 					});
 					break;
 			}
@@ -683,7 +683,7 @@ namespace Mesen.Debugger.ViewModels
 				CpuType.Sms => new string[] { "A", "B", "C", "D", "E", "F", "H", "L", "IX", "IY", "A'", "B'", "C'", "D'", "E'", "F'", "H'", "L'", "I", "R", "PS", "SP" },
 				CpuType.Gba or CpuType.St018 => new string[] { "R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15", "CPSR" },
 				CpuType.Ws => new string[] { "AX", "BX", "CX", "DX", "CS", "IP", "SS", "SP", "BP", "DS", "ES", "SI", "DI", "F" },
-				CpuType.Pic18 => new string[] { "A", "B", "S", "SP" },
+				CpuType.Pic18 => new string[] { "W", "WREG", "BSR", "STKPTR", "STATUS", "A", "B", "S", "SP" },
 				_ => Array.Empty<string>()
 			};
 

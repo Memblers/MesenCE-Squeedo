@@ -8,6 +8,9 @@ class Pic18Cpu;
 class NesConsole;
 class Emulator;
 
+// Indirect addressing modes through FSR0/1/2 (INDF/POSTINC/POSTDEC/PREINC/PLUSW).
+enum class IndirectOp { Indf, PostInc, PostDec, PreInc, PlusW };
+
 class Pic18Peripherals : public ISerializable
 {
 private:
@@ -59,6 +62,19 @@ private:
 	uint16_t GetFSRAddr(int index);
 	uint8_t GetTosIndex();
 
+	// RMW cache: a read-modify-write instruction (e.g. INCF POSTINC2,F) touches the
+	// same indirect register twice. The read resolves the target and applies the one
+	// pointer update; the write-back reuses the cached target so the pointer updates
+	// only once and both halves hit the same address. See AccessIndirect.
+	bool _rmwCached = false;
+	uint16_t _rmwSfr = 0;
+	uint16_t _rmwTarget = 0;
+	void UpdateFsr(int index, uint16_t value);
+	uint16_t AccessIndirect(int index, uint16_t sfrAddr, IndirectOp op, bool isWrite);
+	uint8_t ReadIndirect(int index, uint16_t sfrAddr, IndirectOp op, bool peek);
+	void WriteIndirect(int index, uint16_t sfrAddr, IndirectOp op, uint8_t value, bool fromDebug);
+	void WriteSfrInternal(uint16_t addr, uint8_t value, bool fromDebug);
+
 public:
 	Pic18Peripherals(Pic18CpuState& state, NesConsole* console);
 
@@ -85,7 +101,12 @@ public:
 	// peek=true returns the same value a read would, but without side effects
 	// (no FSR auto-inc/dec, no timer latches, no RCREG pop, no IBF clear)
 	uint8_t ReadSfr(uint16_t addr, bool peek = false);
-	void WriteSfr(uint16_t addr, uint8_t value);
+	// Returns false if the write was dropped (frozen address); fromDebug writes always apply.
+	bool WriteSfr(uint16_t addr, uint8_t value, bool fromDebug = false);
+
+	// Called at instruction boundaries (RAII in the CPU) so a RMW's cached indirect
+	// target can't leak into the next instruction or an out-of-band access.
+	void ResetRmwState() { _rmwCached = false; }
 
 	// Assert/de-assert NES IRQ
 	void SetNesIrq(bool active);

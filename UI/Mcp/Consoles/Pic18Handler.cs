@@ -22,12 +22,21 @@ namespace Mesen.Mcp.Consoles
 		{
 			Pic18CpuRegisters s = GetPic18CpuRegisters();
 			ushort fsr0, fsr1, fsr2;
+			string stack;
 			unsafe {
 				fsr0 = s.FSR[0];
 				fsr1 = s.FSR[1];
 				fsr2 = s.FSR[2];
+
+				//Stack entries are word addresses - show byte addresses to match PC/disassembly
+				List<string> entries = new();
+				for(int i = (int)(s.STKPTR & 0x1F) - 1; i >= 0; i--) {
+					entries.Add("$" + ((s.Stack[i] & 0x1FFFFF) * 2).ToString("X5"));
+				}
+				stack = string.Join(" ", entries);
 			}
 			return new Dictionary<string, string> {
+				["PC"] = "$" + (s.PC * 2).ToString("X4"),
 				["W"] = "$" + s.W.ToString("X2"),
 				["BSR"] = "$" + s.BSR.ToString("X2"),
 				["STATUS"] = "$" + s.STATUS.ToString("X2"),
@@ -37,6 +46,10 @@ namespace Mesen.Mcp.Consoles
 				["FSR2"] = "$" + fsr2.ToString("X4"),
 				["TBLPTR"] = "$" + s.TBLPTR.ToString("X6"),
 				["TABLAT"] = "$" + s.TABLAT.ToString("X2"),
+				["PROD"] = "$" + ((s.PRODH << 8) | s.PRODL).ToString("X4"),
+				["INTCON"] = "$" + s.INTCON.ToString("X2"),
+				["RCON"] = "$" + s.RCON.ToString("X2"),
+				["stack"] = stack,
 				["flags"] = FormatFlagsPic18(s.STATUS)
 			};
 		}

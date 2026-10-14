@@ -156,7 +156,7 @@ namespace Mesen.Interop
 		public static ByteCodeFormat GetByteCodeFormat(this CpuType type)
 		{
 			return type switch {
-				CpuType.St018 or CpuType.Gba => ByteCodeFormat.HexValue,
+				CpuType.St018 or CpuType.Gba or CpuType.Pic18 => ByteCodeFormat.HexValue,
 				_ => ByteCodeFormat.Bytes
 			};
 		}

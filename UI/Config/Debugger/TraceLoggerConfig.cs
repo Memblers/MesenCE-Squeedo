@@ -30,6 +30,7 @@ namespace Mesen.Config
 		[ObservableProperty] public partial TraceLoggerCpuConfig St018Config { get; set; } = new();
 		[ObservableProperty] public partial TraceLoggerCpuConfig GbConfig { get; set; } = new();
 		[ObservableProperty] public partial TraceLoggerCpuConfig NesConfig { get; set; } = new();
+		[ObservableProperty] public partial TraceLoggerCpuConfig Pic18Config { get; set; } = new();
 		[ObservableProperty] public partial TraceLoggerCpuConfig PceConfig { get; set; } = new();
 		[ObservableProperty] public partial TraceLoggerCpuConfig SmsConfig { get; set; } = new();
 		[ObservableProperty] public partial TraceLoggerCpuConfig GbaConfig { get; set; } = new();
@@ -55,7 +56,7 @@ namespace Mesen.Config
 				CpuType.Sms => SmsConfig,
 				CpuType.Gba => GbaConfig,
 				CpuType.Ws => WsConfig,
-				CpuType.Pic18 => NesConfig,
+				CpuType.Pic18 => Pic18Config,
 				_ => throw new NotImplementedException("Unsupport cpu type")
 			};
 		}

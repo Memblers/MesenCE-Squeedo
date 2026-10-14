@@ -18,6 +18,7 @@
 #include "Gameboy/GbTypes.h"
 #include "GBA/GbaTypes.h"
 #include "NES/NesTypes.h"
+#include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "PCE/PceTypes.h"
 #include "SMS/SmsTypes.h"
 #include "WS/WsTypes.h"
@@ -610,6 +611,7 @@ void Disassembler::GetLineData(DisassemblyResult& row, CpuType type, MemoryType 
 				}
 
 				case CpuType::Pic18: {
+					Pic18CpuState& state = (Pic18CpuState&)_debugger->GetCpuStateRef(lineCpuType);
 					if(!disInfo.IsInitialized()) {
 						disInfo = DisassemblyInfo(row.Address.Address, 0, CpuType::Pic18, row.Address.Type, _memoryDumper);
 					} else {
@@ -617,6 +619,10 @@ void Disassembler::GetLineData(DisassemblyResult& row, CpuType type, MemoryType 
 					}
 
 					data.OpSize = disInfo.GetOpSize();
+					data.EffectiveAddress = disInfo.GetEffectiveAddress(_debugger, &state, lineCpuType);
+					if(showMemoryValues && data.EffectiveAddress.ValueSize >= 0) {
+						data.Value = disInfo.GetMemoryValue(data.EffectiveAddress, _memoryDumper, memType);
+					}
 					break;
 				}
 			}

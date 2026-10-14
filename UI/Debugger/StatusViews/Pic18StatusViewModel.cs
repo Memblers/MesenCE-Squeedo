@@ -12,11 +12,19 @@ public unsafe partial class Pic18StatusViewModel : BaseConsoleStatusViewModel
 [DllImport("MesenCore.dll", EntryPoint = "GetPic18CpuRegisters")]
 private static extern void GetPic18CpuRegistersNative(IntPtr state);
 
+[DllImport("MesenCore.dll", EntryPoint = "SetPic18CpuRegisters")]
+private static extern void SetPic18CpuRegistersNative(IntPtr state);
+
 private static unsafe Pic18CpuRegisters GetPic18CpuRegisters()
 {
 Pic18CpuRegisters state = new();
 GetPic18CpuRegistersNative((IntPtr)(&state));
 return state;
+}
+
+private static unsafe void SetPic18CpuRegisters(Pic18CpuRegisters state)
+{
+SetPic18CpuRegistersNative((IntPtr)(&state));
 }
 
 [ObservableProperty] public partial UInt32 RegPC { get; set; }
@@ -74,6 +82,15 @@ public Pic18StatusViewModel()
 this.ObserveProp([
 nameof(FlagC), nameof(FlagDC), nameof(FlagZ), nameof(FlagOV), nameof(FlagN)
 ], () => UpdateFlags());
+
+this.ObserveProp([
+nameof(FlagGIE), nameof(FlagPEIE), nameof(FlagTMR0IE), nameof(FlagINT0IE), nameof(FlagTMR0IF), nameof(FlagINT0IF)
+], () => UpdateIntconValue());
+
+this.ObserveProp([
+nameof(FlagPSPIF), nameof(FlagTXIF), nameof(FlagRCIF), nameof(FlagADIF), nameof(FlagTMR1IF),
+nameof(FlagPSPIE), nameof(FlagTXIE), nameof(FlagRCIE)
+], () => UpdateInterruptRegValues());
 }
 
 private void UpdateFlags()
@@ -84,6 +101,38 @@ RegSTATUS = (byte)(
 (FlagZ ? 0x04 : 0) |
 (FlagOV ? 0x08 : 0) |
 (FlagN ? 0x10 : 0)
+);
+}
+
+private void UpdateIntconValue()
+{
+//Only the 6 managed bits are rebuilt - GIE/PEIE/TMR0IE/INT0IE/TMR0IF/INT0IF (0xF6)
+RegINTCON = (byte)((RegINTCON & ~0xF6) |
+(FlagGIE ? 0x80 : 0) |
+(FlagPEIE ? 0x40 : 0) |
+(FlagTMR0IE ? 0x20 : 0) |
+(FlagINT0IE ? 0x10 : 0) |
+(FlagTMR0IF ? 0x04 : 0) |
+(FlagINT0IF ? 0x02 : 0)
+);
+}
+
+private void UpdateInterruptRegValues()
+{
+//PIR1 managed bits: PSPIF(7) ADIF(6) RCIF(5) TXIF(4) TMR1IF(0) = 0xF1
+RegPIR1 = (byte)((RegPIR1 & ~0xF1) |
+(FlagPSPIF ? 0x80 : 0) |
+(FlagADIF ? 0x40 : 0) |
+(FlagRCIF ? 0x20 : 0) |
+(FlagTXIF ? 0x10 : 0) |
+(FlagTMR1IF ? 0x01 : 0)
+);
+
+//PIE1 managed bits: PSPIE(7) RCIE(5) TXIE(4) = 0xB0
+RegPIE1 = (byte)((RegPIE1 & ~0xB0) |
+(FlagPSPIE ? 0x80 : 0) |
+(FlagRCIE ? 0x20 : 0) |
+(FlagTXIE ? 0x10 : 0)
 );
 }
 
@@ -150,6 +199,29 @@ StackPreview = sb.ToString().TrimEnd();
 
 protected override void InternalUpdateConsoleState()
 {
-// Read-write not supported for PIC18 status panel yet
+Pic18CpuRegisters cpu = GetPic18CpuRegisters();
+
+cpu.PC = RegPC;
+cpu.W = RegW;
+cpu.BSR = RegBSR;
+cpu.STATUS = RegSTATUS;
+cpu.INTCON = RegINTCON;
+cpu.STKPTR = RegSTKPTR;
+cpu.FSR[0] = (ushort)RegFSR0;
+cpu.FSR[1] = (ushort)RegFSR1;
+cpu.FSR[2] = (ushort)RegFSR2;
+cpu.TBLPTR = RegTBLPTR;
+cpu.TABLAT = RegTABLAT;
+cpu.PRODH = (byte)(RegPROD >> 8);
+cpu.PRODL = (byte)(RegPROD & 0xFF);
+cpu.RCON = RegRCON;
+cpu.INTCON2 = RegINTCON2;
+cpu.INTCON3 = RegINTCON3;
+cpu.PIR1 = RegPIR1;
+cpu.PIR2 = RegPIR2;
+cpu.PIE1 = RegPIE1;
+cpu.PIE2 = RegPIE2;
+
+SetPic18CpuRegisters(cpu);
 }
 }

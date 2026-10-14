@@ -86,6 +86,7 @@ void Pic18Debugger::ProcessInstruction()
 		AddressInfo irqDestAddr = { (int32_t)(irqVector * 2), MemoryType::Pic18ProgramRom };
 		AddressInfo retAddress = { (int32_t)(irqReturnPc * 2), MemoryType::Pic18ProgramRom };
 		_callstackManager->Push(srcAddress, irqReturnPc * 2, irqDestAddr, irqVector * 2, retAddress, irqReturnPc * 2, state.STKPTR, StackFrameFlags::Irq);
+		_step->ProcessNmiIrq(false);  //RunToIrq support - an interrupt was just taken
 	} else if(Pic18DisUtils::IsJumpToSub(_prevOpCode)) {
 		// CALL/RCALL — push to callstack
 		uint32_t prevByteAddr = _prevPc * 2;
@@ -122,6 +123,9 @@ void Pic18Debugger::ProcessInstruction()
 		traceState.W = state.W;
 		traceState.STATUS = state.STATUS;
 		traceState.BSR = state.BSR;
+		traceState.STKPTR = state.STKPTR;
+		traceState.CycleCount = state.CycleCount;
+		memcpy(traceState.FSR, state.FSR, sizeof(traceState.FSR));
 		DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addrInfo, byteAddr, 0, CpuType::Pic18);
 		_traceLogger->Log(traceState, disInfo, operation, addrInfo);
 	}
@@ -146,6 +150,8 @@ void Pic18Debugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationTyp
 	if(_traceLogger->IsEnabled()) {
 		_traceLogger->LogNonExec(operation, addressInfo);
 	}
+
+	_debugger->ProcessBreakConditions(CpuType::Pic18, *_step.get(), _breakpointManager.get(), operation, addressInfo);
 }
 
 void Pic18Debugger::ProcessWrite(uint32_t addr, uint8_t value, MemoryOperationType opType)
@@ -159,6 +165,8 @@ void Pic18Debugger::ProcessWrite(uint32_t addr, uint8_t value, MemoryOperationTy
 	if(_traceLogger->IsEnabled()) {
 		_traceLogger->LogNonExec(operation, addressInfo);
 	}
+
+	_debugger->ProcessBreakConditions(CpuType::Pic18, *_step.get(), _breakpointManager.get(), operation, addressInfo);
 }
 
 int32_t Pic18Debugger::GetEffectiveStepCount(int32_t stepCount)
@@ -183,6 +191,10 @@ void Pic18Debugger::Step(int32_t stepCount, StepType type)
 
 	StepRequest step(type);
 	switch(type) {
+		case StepType::RunToIrq:
+			//Breaks when an interrupt is taken (handled by ProcessNmiIrq in ProcessInstruction)
+			break;
+
 		case StepType::Step:
 		case StepType::CpuCycleStep:
 			//The PIC18 has no cycle-level step hook - treat it as an instruction step
@@ -243,11 +255,18 @@ uint32_t Pic18Debugger::GetProgramCounter(bool getInstPc)
 void Pic18Debugger::SetProgramCounter(uint32_t addr, bool updateDebuggerOnly)
 {
 	if(!_cpu) return;
-	if(updateDebuggerOnly) {
-		// Only update debugger's view
-	} else {
-		_cpu->GetState().PC = addr / 2;
+	Pic18CpuState& state = _cpu->GetState();
+	if(!updateDebuggerOnly) {
+		state.PC = addr / 2;
 	}
+
+	//Refresh the "previous instruction" tracking so callstack detection doesn't
+	//treat the pre-jump instruction as the predecessor of the new location
+	//after a state load or a manual PC change.
+	uint32_t pc = state.PC;
+	_prevOpCode = ((uint16_t)_cpu->ReadProgram(pc * 2 + 1) << 8) | _cpu->ReadProgram(pc * 2);
+	_prevPc = pc;
+	_prevStackPointer = state.STKPTR;
 }
 
 BaseState& Pic18Debugger::GetState()
@@ -271,6 +290,15 @@ DebuggerFeatures Pic18Debugger::GetSupportedFeatures()
 	features.StepOver = true;
 	features.StepOut = true;
 	features.CallStack = true;
+	features.RunToIrq = true;
+
+	//PIC18 vectors hold instructions (GOTO), not pointers - use Direct. Addresses are
+	//byte-based (matching GetProgramCounter): the datasheet vectors are byte addresses
+	//(0x0000 reset, 0x0008 high-priority IRQ, 0x0018 low-priority IRQ).
+	features.CpuVectorCount = 3;
+	features.CpuVectors[0] = { "Reset", 0x0000, VectorType::Direct };
+	features.CpuVectors[1] = { "IRQ High", 0x0008, VectorType::Direct };
+	features.CpuVectors[2] = { "IRQ Low", 0x0018, VectorType::Direct };
 	return features;
 }
 

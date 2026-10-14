@@ -59,6 +59,8 @@ namespace Mesen.Mcp.Tools
 					"[Disassembly][Align,24] A:[A,2h] B:[B,2h] C:[C,2h] D:[D,2h] E:[E,2h] F:[F,2h] H:[H,2h] L:[L,2h] SP:[SP,4h]",
 				CpuType.Gba =>
 					"[Disassembly][Align,42] ",
+				CpuType.Pic18 =>
+					"[Disassembly][Align,24] W:[W,2h] BSR:[BSR,2h] STKPTR:[STKPTR,2h] STATUS:[PS,5]",
 				_ =>
 					"[Disassembly][Align,24] "
 			};

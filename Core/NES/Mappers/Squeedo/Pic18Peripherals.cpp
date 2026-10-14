@@ -293,43 +293,53 @@ uint8_t Pic18Peripherals::ReadSfr(uint16_t addr, bool peek)
 	case Pic18Sfr::FSR2L: return _state.FSR[2] & 0xFF;
 	case Pic18Sfr::FSR2H: return (_state.FSR[2] >> 8) & 0x0F;
 
-	// INDF reads (indirect addressing)
-	case Pic18Sfr::INDF0: return ReadSfr(GetFSRAddr(0), peek);
-	case Pic18Sfr::POSTINC0: { uint8_t v = ReadSfr(GetFSRAddr(0), peek); if(!peek) _state.FSR[0]++; return v; }
-	case Pic18Sfr::POSTDEC0: { uint8_t v = ReadSfr(GetFSRAddr(0), peek); if(!peek) _state.FSR[0]--; return v; }
-	case Pic18Sfr::PREINC0: { if(!peek) _state.FSR[0]++; return ReadSfr(GetFSRAddr(0), peek); }
-	case Pic18Sfr::PLUSW0: return ReadSfr((_state.FSR[0] + (int8_t)_state.W) & 0xFFF, peek);
-	case Pic18Sfr::INDF1: return ReadSfr(GetFSRAddr(1), peek);
-	case Pic18Sfr::POSTINC1: { uint8_t v = ReadSfr(GetFSRAddr(1), peek); if(!peek) _state.FSR[1]++; return v; }
-	case Pic18Sfr::POSTDEC1: { uint8_t v = ReadSfr(GetFSRAddr(1), peek); if(!peek) _state.FSR[1]--; return v; }
-	case Pic18Sfr::PREINC1: { if(!peek) _state.FSR[1]++; return ReadSfr(GetFSRAddr(1), peek); }
-	case Pic18Sfr::PLUSW1: return ReadSfr((_state.FSR[1] + (int8_t)_state.W) & 0xFFF, peek);
-	case Pic18Sfr::INDF2: return ReadSfr(GetFSRAddr(2), peek);
-	case Pic18Sfr::POSTINC2: { uint8_t v = ReadSfr(GetFSRAddr(2), peek); if(!peek) _state.FSR[2]++; return v; }
-	case Pic18Sfr::POSTDEC2: { uint8_t v = ReadSfr(GetFSRAddr(2), peek); if(!peek) _state.FSR[2]--; return v; }
-	case Pic18Sfr::PREINC2: { if(!peek) _state.FSR[2]++; return ReadSfr(GetFSRAddr(2), peek); }
-	case Pic18Sfr::PLUSW2: return ReadSfr((_state.FSR[2] + (int8_t)_state.W) & 0xFFF, peek);
+	// INDF/POSTINC/POSTDEC/PREINC/PLUSW reads (indirect addressing)
+	case Pic18Sfr::INDF0: return ReadIndirect(0, addr, IndirectOp::Indf, peek);
+	case Pic18Sfr::POSTINC0: return ReadIndirect(0, addr, IndirectOp::PostInc, peek);
+	case Pic18Sfr::POSTDEC0: return ReadIndirect(0, addr, IndirectOp::PostDec, peek);
+	case Pic18Sfr::PREINC0: return ReadIndirect(0, addr, IndirectOp::PreInc, peek);
+	case Pic18Sfr::PLUSW0: return ReadIndirect(0, addr, IndirectOp::PlusW, peek);
+	case Pic18Sfr::INDF1: return ReadIndirect(1, addr, IndirectOp::Indf, peek);
+	case Pic18Sfr::POSTINC1: return ReadIndirect(1, addr, IndirectOp::PostInc, peek);
+	case Pic18Sfr::POSTDEC1: return ReadIndirect(1, addr, IndirectOp::PostDec, peek);
+	case Pic18Sfr::PREINC1: return ReadIndirect(1, addr, IndirectOp::PreInc, peek);
+	case Pic18Sfr::PLUSW1: return ReadIndirect(1, addr, IndirectOp::PlusW, peek);
+	case Pic18Sfr::INDF2: return ReadIndirect(2, addr, IndirectOp::Indf, peek);
+	case Pic18Sfr::POSTINC2: return ReadIndirect(2, addr, IndirectOp::PostInc, peek);
+	case Pic18Sfr::POSTDEC2: return ReadIndirect(2, addr, IndirectOp::PostDec, peek);
+	case Pic18Sfr::PREINC2: return ReadIndirect(2, addr, IndirectOp::PreInc, peek);
+	case Pic18Sfr::PLUSW2: return ReadIndirect(2, addr, IndirectOp::PlusW, peek);
 
 	default:
 		return _state.Data[addr & 0xFFF];
 	}
 }
 
-void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
+bool Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value, bool fromDebug)
 {
 	addr &= 0xFFF;  // PIC18 uses 12-bit addressing (BSR<<8|f wraps into $F00-$FFF SFR space)
 	SfrRecursionGuard guard(_sfrRecursionDepth);
 	if(_sfrRecursionDepth > 4) {
 		_state.Data[addr] = value;
-		return;
+		return true;
 	}
-	// Debug write hook: raised for the SFR access itself and, via the indirect cases below
-	// (POSTINC/INDF/etc. recurse into WriteSfr), for the resolved target address too.
+	// Debug write hook: raised for the SFR access itself and, via the indirect cases in
+	// WriteSfrInternal (POSTINC/INDF/etc. recurse back through here), for the resolved
+	// target address too. Frozen addresses drop the write (unless it came from the debugger).
 	if(_emu && !Pic18Dbg::InWriteHook()) {
 		Pic18Dbg::InWriteHook() = true;
-		_emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
+		bool processWrite = _emu->ProcessMemoryWrite<CpuType::Pic18>(addr, value, MemoryOperationType::Write);
 		Pic18Dbg::InWriteHook() = false;
+		if(!processWrite && !fromDebug) {
+			return false;
+		}
 	}
+	WriteSfrInternal(addr, value, fromDebug);
+	return true;
+}
+
+void Pic18Peripherals::WriteSfrInternal(uint16_t addr, uint8_t value, bool fromDebug)
+{
 	switch(addr) {
 	case Pic18Sfr::TMR0L:
 		_state.Data[Pic18Sfr::TMR0L & 0xFFF] = value;
@@ -398,22 +408,22 @@ void Pic18Peripherals::WriteSfr(uint16_t addr, uint8_t value)
 		}
 		return;
 
-	// Indirect writes
-	case Pic18Sfr::INDF0: WriteSfr(GetFSRAddr(0), value); return;
-	case Pic18Sfr::POSTINC0: { WriteSfr(GetFSRAddr(0), value); uint16_t v = (_state.FSR[0] + 1) & 0xFFF; _state.FSR[0] = v; _state.Data[Pic18Sfr::FSR0L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR0H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::POSTDEC0: { WriteSfr(GetFSRAddr(0), value); uint16_t v = (_state.FSR[0] - 1) & 0xFFF; _state.FSR[0] = v; _state.Data[Pic18Sfr::FSR0L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR0H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::PREINC0: { uint16_t v = (_state.FSR[0] + 1) & 0xFFF; _state.FSR[0] = v; _state.Data[Pic18Sfr::FSR0L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR0H & 0xFFF] = (v >> 8) & 0x0F; WriteSfr(v, value); return; }
-	case Pic18Sfr::PLUSW0: WriteSfr((_state.FSR[0] + (int8_t)_state.W) & 0xFFF, value); return;
-	case Pic18Sfr::INDF1: WriteSfr(GetFSRAddr(1), value); return;
-	case Pic18Sfr::POSTINC1: { WriteSfr(GetFSRAddr(1), value); uint16_t v = (_state.FSR[1] + 1) & 0xFFF; _state.FSR[1] = v; _state.Data[Pic18Sfr::FSR1L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR1H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::POSTDEC1: { WriteSfr(GetFSRAddr(1), value); uint16_t v = (_state.FSR[1] - 1) & 0xFFF; _state.FSR[1] = v; _state.Data[Pic18Sfr::FSR1L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR1H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::PREINC1: { uint16_t v = (_state.FSR[1] + 1) & 0xFFF; _state.FSR[1] = v; _state.Data[Pic18Sfr::FSR1L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR1H & 0xFFF] = (v >> 8) & 0x0F; WriteSfr(v, value); return; }
-	case Pic18Sfr::PLUSW1: WriteSfr((_state.FSR[1] + (int8_t)_state.W) & 0xFFF, value); return;
-	case Pic18Sfr::INDF2: WriteSfr(GetFSRAddr(2), value); return;
-	case Pic18Sfr::POSTINC2: { WriteSfr(GetFSRAddr(2), value); uint16_t v = (_state.FSR[2] + 1) & 0xFFF; _state.FSR[2] = v; _state.Data[Pic18Sfr::FSR2L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR2H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::POSTDEC2: { WriteSfr(GetFSRAddr(2), value); uint16_t v = (_state.FSR[2] - 1) & 0xFFF; _state.FSR[2] = v; _state.Data[Pic18Sfr::FSR2L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR2H & 0xFFF] = (v >> 8) & 0x0F; return; }
-	case Pic18Sfr::PREINC2: { uint16_t v = (_state.FSR[2] + 1) & 0xFFF; _state.FSR[2] = v; _state.Data[Pic18Sfr::FSR2L & 0xFFF] = v & 0xFF; _state.Data[Pic18Sfr::FSR2H & 0xFFF] = (v >> 8) & 0x0F; WriteSfr(v, value); return; }
-	case Pic18Sfr::PLUSW2: WriteSfr((_state.FSR[2] + (int8_t)_state.W) & 0xFFF, value); return;
+	// Indirect writes (INDF/POSTINC/POSTDEC/PREINC/PLUSW)
+	case Pic18Sfr::INDF0: WriteIndirect(0, addr, IndirectOp::Indf, value, fromDebug); return;
+	case Pic18Sfr::POSTINC0: WriteIndirect(0, addr, IndirectOp::PostInc, value, fromDebug); return;
+	case Pic18Sfr::POSTDEC0: WriteIndirect(0, addr, IndirectOp::PostDec, value, fromDebug); return;
+	case Pic18Sfr::PREINC0: WriteIndirect(0, addr, IndirectOp::PreInc, value, fromDebug); return;
+	case Pic18Sfr::PLUSW0: WriteIndirect(0, addr, IndirectOp::PlusW, value, fromDebug); return;
+	case Pic18Sfr::INDF1: WriteIndirect(1, addr, IndirectOp::Indf, value, fromDebug); return;
+	case Pic18Sfr::POSTINC1: WriteIndirect(1, addr, IndirectOp::PostInc, value, fromDebug); return;
+	case Pic18Sfr::POSTDEC1: WriteIndirect(1, addr, IndirectOp::PostDec, value, fromDebug); return;
+	case Pic18Sfr::PREINC1: WriteIndirect(1, addr, IndirectOp::PreInc, value, fromDebug); return;
+	case Pic18Sfr::PLUSW1: WriteIndirect(1, addr, IndirectOp::PlusW, value, fromDebug); return;
+	case Pic18Sfr::INDF2: WriteIndirect(2, addr, IndirectOp::Indf, value, fromDebug); return;
+	case Pic18Sfr::POSTINC2: WriteIndirect(2, addr, IndirectOp::PostInc, value, fromDebug); return;
+	case Pic18Sfr::POSTDEC2: WriteIndirect(2, addr, IndirectOp::PostDec, value, fromDebug); return;
+	case Pic18Sfr::PREINC2: WriteIndirect(2, addr, IndirectOp::PreInc, value, fromDebug); return;
+	case Pic18Sfr::PLUSW2: WriteIndirect(2, addr, IndirectOp::PlusW, value, fromDebug); return;
 
 	// Core registers that should update the state struct
 	case Pic18Sfr::INTCON: _state.INTCON = value; _state.Data[addr & 0xFFF] = value; _state.InterruptPending = true; return;
@@ -484,6 +494,83 @@ void Pic18Peripherals::SetNesIrq(bool active)
 uint16_t Pic18Peripherals::GetFSRAddr(int index)
 {
 	return _state.FSR[index] & 0xFFF;
+}
+
+void Pic18Peripherals::UpdateFsr(int index, uint16_t value)
+{
+	value &= 0xFFF;
+	_state.FSR[index] = value;
+	static constexpr uint16_t fsrL[3] = { Pic18Sfr::FSR0L, Pic18Sfr::FSR1L, Pic18Sfr::FSR2L };
+	static constexpr uint16_t fsrH[3] = { Pic18Sfr::FSR0H, Pic18Sfr::FSR1H, Pic18Sfr::FSR2H };
+	_state.Data[fsrL[index] & 0xFFF] = (uint8_t)(value & 0xFF);
+	_state.Data[fsrH[index] & 0xFFF] = (uint8_t)((value >> 8) & 0x0F);
+}
+
+// Resolve an indirect access (INDF/POSTINC/POSTDEC/PREINC/PLUSW) to its target,
+// applying the pointer update for POSTINC/POSTDEC/PREINC exactly once. A
+// read-modify-write instruction touches the same indirect register twice (read
+// then write); on hardware that is ONE data access with ONE pointer update. The
+// read caches the resolved target and the write-back reuses it without a second
+// pointer update, so RMW writes land on the same byte the read returned.
+uint16_t Pic18Peripherals::AccessIndirect(int index, uint16_t sfrAddr, IndirectOp op, bool isWrite)
+{
+	if(isWrite && _rmwCached && _rmwSfr == sfrAddr) {
+		// RMW write-back: reuse the read's target, skip the second pointer update.
+		_rmwCached = false;
+		return _rmwTarget;
+	}
+
+	uint16_t target;
+	switch(op) {
+		case IndirectOp::PreInc:
+			UpdateFsr(index, (uint16_t)(_state.FSR[index] + 1));
+			target = GetFSRAddr(index);
+			break;
+		case IndirectOp::PostInc:
+			target = GetFSRAddr(index);
+			UpdateFsr(index, (uint16_t)(_state.FSR[index] + 1));
+			break;
+		case IndirectOp::PostDec:
+			target = GetFSRAddr(index);
+			UpdateFsr(index, (uint16_t)(_state.FSR[index] - 1));
+			break;
+		case IndirectOp::PlusW:
+			target = (uint16_t)((_state.FSR[index] + (int8_t)_state.W) & 0xFFF);
+			break;
+		case IndirectOp::Indf:
+		default:
+			target = GetFSRAddr(index);
+			break;
+	}
+
+	if(!isWrite) {
+		// A read arms the cache so a RMW write-back can reuse this target.
+		_rmwCached = true;
+		_rmwSfr = sfrAddr;
+		_rmwTarget = target;
+	} else {
+		_rmwCached = false;
+	}
+	return target;
+}
+
+uint8_t Pic18Peripherals::ReadIndirect(int index, uint16_t sfrAddr, IndirectOp op, bool peek)
+{
+	if(peek) {
+		// Debugger peek: no pointer update, no cache. Read at the un-updated target.
+		uint16_t target = (op == IndirectOp::PlusW)
+			? (uint16_t)((_state.FSR[index] + (int8_t)_state.W) & 0xFFF)
+			: GetFSRAddr(index);
+		return ReadSfr(target, true);
+	}
+	uint16_t target = AccessIndirect(index, sfrAddr, op, false);
+	return ReadSfr(target, false);
+}
+
+void Pic18Peripherals::WriteIndirect(int index, uint16_t sfrAddr, IndirectOp op, uint8_t value, bool fromDebug)
+{
+	uint16_t target = AccessIndirect(index, sfrAddr, op, true);
+	WriteSfr(target, value, fromDebug);
 }
 
 void Pic18Peripherals::Serialize(Serializer& s)

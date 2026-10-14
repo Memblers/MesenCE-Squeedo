@@ -21,6 +21,7 @@
 #include "GBA/Debugger/GbaDisUtils.h"
 #include "WS/Debugger/WsDisUtils.h"
 #include "NES/Debugger/pic18/Pic18DisUtils.h"
+#include "NES/Mappers/Squeedo/Pic18Types.h"
 #include "Shared/EmuSettings.h"
 
 DisassemblyInfo::DisassemblyInfo()
@@ -127,7 +128,11 @@ EffectiveAddressInfo DisassemblyInfo::GetEffectiveAddress(Debugger* debugger, vo
 		case CpuType::Sms: return SmsDisUtils::GetEffectiveAddress(*this, (SmsConsole*)debugger->GetConsole(), *(SmsCpuState*)cpuState);
 		case CpuType::Gba: return GbaDisUtils::GetEffectiveAddress(*this, (GbaConsole*)debugger->GetConsole(), *(GbaCpuState*)cpuState);
 		case CpuType::Ws: return WsDisUtils::GetEffectiveAddress(*this, (WsConsole*)debugger->GetConsole(), *(WsCpuState*)cpuState);
-		case CpuType::Pic18: return {};
+		case CpuType::Pic18: {
+			Pic18CpuState& state = *(Pic18CpuState*)cpuState;
+			uint16_t opcode = (uint16_t)(_byteCode[0] | (_byteCode[1] << 8));
+			return Pic18DisUtils::GetEffectiveAddress(opcode, state.W, state.BSR, state.FSR);
+		}
 	}
 
 	throw std::runtime_error("GetEffectiveAddress - Unsupported CPU type");
