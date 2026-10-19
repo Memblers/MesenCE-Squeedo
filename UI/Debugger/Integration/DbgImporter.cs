@@ -332,7 +332,8 @@ namespace Mesen.Debugger.Integration
 				_segments.Add(segment.ID, segment);
 				return true;
 			} else if(row.StartsWith("seg")) {
-				System.Diagnostics.Debug.Fail("Regex doesn't match seg");
+				//Skip malformed rows gracefully (Debug.Fail would kill the process)
+				System.Diagnostics.Debug.WriteLine("Regex doesn't match seg: " + row);
 			}
 
 			return false;
@@ -353,7 +354,8 @@ namespace Mesen.Debugger.Integration
 				_files.Add(file.ID, file);
 				return true;
 			} else if(row.StartsWith("file")) {
-				System.Diagnostics.Debug.Fail("Regex doesn't match file");
+				//Skip malformed rows gracefully (Debug.Fail would kill the process)
+				System.Diagnostics.Debug.WriteLine("Regex doesn't match file: " + row);
 			}
 
 			return false;
@@ -388,7 +390,8 @@ namespace Mesen.Debugger.Integration
 				_lines.Add(line.ID, line);
 				return true;
 			} else {
-				System.Diagnostics.Debug.Fail("Regex doesn't match line");
+				//Skip malformed rows gracefully (Debug.Fail would kill the process)
+				System.Diagnostics.Debug.WriteLine("Regex doesn't match line: " + row);
 			}
 
 			return false;
@@ -422,7 +425,8 @@ namespace Mesen.Debugger.Integration
 				_spans.Add(span.ID, span);
 				return true;
 			} else {
-				System.Diagnostics.Debug.Fail("Regex doesn't match span");
+				//Skip malformed rows gracefully (Debug.Fail would kill the process)
+				System.Diagnostics.Debug.WriteLine("Regex doesn't match span: " + row);
 			}
 
 			return false;
@@ -440,7 +444,8 @@ namespace Mesen.Debugger.Integration
 				_cSymbols.Add(symbol.ID, symbol);
 				return true;
 			} else {
-				System.Diagnostics.Debug.Fail("Regex doesn't match csym");
+				//Skip malformed rows gracefully (Debug.Fail would kill the process)
+				System.Diagnostics.Debug.WriteLine("Regex doesn't match csym: " + row);
 			}
 
 			return false;

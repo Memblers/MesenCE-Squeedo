@@ -1,5 +1,8 @@
 using Mesen.Debugger;
+using Mesen.Debugger.Labels;
+using Mesen.Debugger.Utilities;
 using Mesen.Interop;
+using Mesen.Utilities;
 using ModelContextProtocol;
 using ModelContextProtocol.Server;
 using System;
@@ -130,7 +133,7 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_label", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Manage labels. Use action 'set' to set a label on an address, or 'clear_all' to remove all labels.")]
+		 Description("Manage labels. Use action 'set' to set a label on an address, or 'clear_all' to remove all labels. Labels from symbol files (e.g. <rom>.mlb next to the ROM) are loaded automatically when the ROM is loaded.")]
 		public static string Label(
 			[Description("Action: 'set' or 'clear_all'")] string action,
 			[Description("Address (decimal or 0x/$ hex) - required for 'set'")] string? address = null,
@@ -155,16 +158,37 @@ namespace Mesen.Mcp.Tools
 					uint addr = McpToolHelper.ParseAddress(address);
 					MemoryType memType = McpToolHelper.ParseMemoryType(memoryType);
 
-					DebugApi.SetLabel(addr, memType, label, comment ?? "");
+					McpToolHelper.OnUIThread(() => LabelManager.SetLabel(addr, memType, label, comment ?? ""));
 					return "Label '" + label + "' set at $" + addr.ToString("X4");
 
 				case "clear_all":
-					DebugApi.ClearLabels();
+					McpToolHelper.OnUIThread(() => LabelManager.ResetLabels());
 					return "Labels cleared.";
 
 				default:
 					throw new McpException("Invalid action: " + action + ". Use 'set' or 'clear_all'.");
 			}
+		}
+
+		[McpServerTool(Name = "mesen_load_labels", ReadOnly = false, Destructive = false, OpenWorld = false),
+		 Description("Load labels/symbols from a file. Supported formats: .mlb (Mesen labels), .sym (WLA-DX/RGBDS/bass/pceas), .dbg (cc65), .cdb (SDCC), .elf, .fns (NESASM). Note: symbol files placed next to the ROM with the same base name (e.g. <rom>.mlb) are loaded automatically when the ROM is loaded.")]
+		public static string LoadLabels(
+			[Description("Path to the symbol/label file")] string path)
+		{
+			McpToolHelper.EnsureDebuggerReady();
+
+			if(!File.Exists(path)) {
+				throw new McpException("File not found: " + path);
+			}
+
+			string ext = Path.GetExtension(path).TrimStart('.').ToLowerInvariant();
+			if(ext != FileDialogHelper.DbgFileExt && ext != FileDialogHelper.SymFileExt && ext != FileDialogHelper.CdbFileExt &&
+				ext != FileDialogHelper.ElfFileExt && ext != FileDialogHelper.MesenLabelExt && ext != FileDialogHelper.NesAsmLabelExt) {
+				throw new McpException("Unsupported label file format: ." + ext + " (supported: .mlb, .sym, .dbg, .cdb, .elf, .fns)");
+			}
+
+			McpToolHelper.OnUIThread(() => DebugWorkspaceManager.LoadSupportedFile(path, false));
+			return "Loaded labels from " + path + " (" + LabelManager.GetAllLabels().Count + " labels active)";
 		}
 
 		[McpServerTool(Name = "mesen_get_cdl_statistics", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),

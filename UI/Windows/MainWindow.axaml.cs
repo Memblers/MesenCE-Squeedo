@@ -330,7 +330,8 @@ namespace Mesen.Windows
 			switch(e.NotificationType) {
 				case ConsoleNotificationType.GameLoaded:
 					CheatCodes.ApplyCheats();
-					MesenMcpServer.Instance.OnRomLoaded();
+					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
+					MesenMcpServer.Instance.OnRomLoaded(evtParams.IsPowerCycle);
 					RomInfo romInfo = EmuApi.GetRomInfo();
 
 					Dispatcher.UIThread.Post(() => {
@@ -354,7 +355,6 @@ namespace Mesen.Windows
 
 					GameConfig.LoadGameConfig(romInfo).ApplyConfig();
 
-					GameLoadedEventParams evtParams = Marshal.PtrToStructure<GameLoadedEventParams>(e.Parameter);
 					if(!evtParams.IsPowerCycle) {
 						Dispatcher.UIThread.Post(() => {
 							_model.RecentGames.Visible = false;

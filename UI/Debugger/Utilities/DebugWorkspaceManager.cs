@@ -1,4 +1,5 @@
-﻿using Mesen.Config;
+﻿using Avalonia.Threading;
+using Mesen.Config;
 using Mesen.Debugger.Integration;
 using Mesen.Debugger.Labels;
 using Mesen.Interop;
@@ -19,6 +20,7 @@ namespace Mesen.Debugger.Utilities
 		private static DebugWorkspace? _workspace = null;
 		private static RomInfo _romInfo = new();
 		private static string _path = "";
+		private static string? _loadedRomPath = null;
 		public static ISymbolProvider? SymbolProvider { get; private set; }
 
 		public static event EventHandler? SymbolProviderChanged;
@@ -112,7 +114,25 @@ namespace Mesen.Debugger.Utilities
 				}
 			}
 			LabelManager.ResumeEvents();
+			_loadedRomPath = _romInfo.RomPath;
 			SymbolProviderChanged?.Invoke(null, EventArgs.Empty);
+		}
+
+		public static void EnsureLoaded()
+		{
+			//Loads the debug workspace (watch/breakpoints) and symbol files (e.g. <rom>.mlb)
+			//for the current ROM, if they haven't been loaded yet. Used by the MCP tools so
+			//label resolution works without having to open a debug window first.
+			if(!EmuApi.IsRunning() || EmuApi.GetRomInfo().RomPath == _loadedRomPath) {
+				return;
+			}
+
+			if(Dispatcher.UIThread.CheckAccess()) {
+				Load();
+			} else {
+				//Always run on the UI thread - loading raises events that update debug window view models
+				Dispatcher.UIThread.InvokeAsync(() => Load()).Wait();
+			}
 		}
 
 		private static void ResetLabels()

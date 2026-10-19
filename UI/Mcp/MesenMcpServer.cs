@@ -1,3 +1,7 @@
+using Avalonia.Threading;
+using Mesen.Debugger;
+using Mesen.Debugger.Labels;
+using Mesen.Debugger.Utilities;
 using Mesen.Interop;
 using Mesen.Mcp.Tools;
 using Microsoft.AspNetCore.Builder;
@@ -110,12 +114,27 @@ namespace Mesen.Mcp
 		}
 
 		/// <summary>
-		/// Called when a ROM is loaded so we can re-initialize the debugger and tracing.
+		/// Called when a ROM is loaded so we can re-initialize the debugger and tracing,
+		/// and load the debug workspace (symbol/label files like <rom>.mlb) so MCP tools
+		/// can resolve labels without requiring a debug window to be opened first.
 		/// </summary>
-		public void OnRomLoaded()
+		public void OnRomLoaded(bool isPowerCycle)
 		{
-			if(_isRunning) {
-				InitializeDebuggerAndTracing();
+			if(!_isRunning) {
+				return;
+			}
+
+			InitializeDebuggerAndTracing();
+
+			if(isPowerCycle) {
+				//On power cycle, the core debugger is recreated - re-push labels and
+				//breakpoints without reloading the workspace from disk
+				Dispatcher.UIThread.Post(() => {
+					BreakpointManager.SetBreakpoints();
+					LabelManager.RefreshLabels(false);
+				});
+			} else {
+				Dispatcher.UIThread.Post(() => DebugWorkspaceManager.Load());
 			}
 		}
 

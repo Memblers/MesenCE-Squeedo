@@ -357,10 +357,20 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		if(opcode == 0x0004) { _state.RCON |= Pic18RconBits::TO | Pic18RconBits::PD; return 1; } // CLRWDT
 		if(opcode == 0x0005) { PushStack(_state.PC); return 1; } // PUSH
 		if(opcode == 0x0006) { PopStack(); return 1; } // POP
-		if(opcode == 0x0007) { // DAW
-			uint8_t nibLo = _state.W & 0x0F;
-			if(nibLo > 9 || (_state.STATUS & Pic18StatusBits::DC)) { _state.W += 0x06; }
-			if((_state.W & 0xF0) > 0x90 || (_state.STATUS & Pic18StatusBits::C)) { _state.W += 0x60; }
+		if(opcode == 0x0007) { // DAW (DS39626E "Decimal Adjust W Register"; only C is affected)
+			bool oldC = (_state.STATUS & Pic18StatusBits::C) != 0;
+			uint16_t sum = _state.W;
+			// Low nibble: +6 if > 9 or DC (the adjust's carry propagates into the high nibble)
+			if((sum & 0x0F) > 9 || (_state.STATUS & Pic18StatusBits::DC)) { sum += 0x06; }
+			// High nibble: +6 if it (plus the low adjust's carry) is > 9 or C was already set
+			if((sum >> 4) > 9 || oldC) { sum += 0x60; }
+			_state.W = (uint8_t)sum;
+			// C = decimal carry out of the adjustment; an incoming C stays set (BCD carry)
+			if(sum > 0xFF || oldC) {
+				_state.STATUS |= Pic18StatusBits::C;
+			} else {
+				_state.STATUS &= ~Pic18StatusBits::C;
+			}
 			return 1;
 		}
 		if(opcode == 0x00FF) { Reset(); return 1; } // RESET
@@ -446,10 +456,10 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 				_state.PRODH = prod >> 8;
 				return 1;
 			} else {
-				// DECF
+				// DECF (DS39626E: (f) - 1 -> dest; affects C, DC, N, OV, Z)
 				val = ReadData(addr);
 				result = val - 1;
-				SetNZ(result);
+				SetSUBFlags(val, 1, result);
 				if(d) WriteData(addr, result); else _state.W = result;
 				return 1;
 			}
@@ -522,10 +532,10 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 			SetADDFlags(_state.W, val, result);
 			if(d) WriteData(addr, result); else _state.W = result;
 			return 1;
-		case 2: // INCF
+		case 2: // INCF (DS39626E: (f) + 1 -> dest; affects C, DC, N, OV, Z)
 			val = ReadData(addr);
 			result = val + 1;
-			SetNZ(result);
+			SetADDFlags(val, 1, result);
 			if(d) WriteData(addr, result); else _state.W = result;
 			return 1;
 		case 3: // DECFSZ
@@ -702,10 +712,9 @@ int Pic18Cpu::DecodeAndExecute(uint16_t opcode)
 		case 4: // SETF
 			WriteData(addr, 0xFF);
 			return 1;
-		case 5: // CLRF
+		case 5: // CLRF (DS39626E: 000h -> f, 1 -> Z; Z is the only status bit affected)
 			WriteData(addr, 0);
 			_state.STATUS |= Pic18StatusBits::Z;
-			_state.STATUS &= ~Pic18StatusBits::N;
 			return 1;
 		case 6: // NEGF
 			val = ReadData(addr);

@@ -68,6 +68,15 @@ namespace Mesen.Config
 				case MemoryType.GbaPaletteRam:
 				case MemoryType.WsBootRom:
 				case MemoryType.WsPort:
+				case MemoryType.St018Memory:
+				case MemoryType.SpcDspRegisters:
+				case MemoryType.GbBgPaletteRam:
+				case MemoryType.GbObjPaletteRam:
+				case MemoryType.SmsVideoRam:
+				case MemoryType.SmsPaletteRam:
+				case MemoryType.SmsPort:
+				case MemoryType.Pic18Memory:
+				case MemoryType.Pic18SfrRam:
 					return ImportOtherLabels;
 
 				case MemoryType.SnesPrgRom:
@@ -84,6 +93,10 @@ namespace Mesen.Config
 				case MemoryType.GbaPrgRom:
 				case MemoryType.GbaBootRom:
 				case MemoryType.WsPrgRom:
+				case MemoryType.St018PrgRom:
+				case MemoryType.St018DataRom:
+				case MemoryType.SmsBootRom:
+				case MemoryType.Pic18ProgramRom:
 					return ImportPrgRomLabels;
 
 				case MemoryType.SnesWorkRam:
@@ -106,6 +119,8 @@ namespace Mesen.Config
 				case MemoryType.GbaIntWorkRam:
 				case MemoryType.GbaExtWorkRam:
 				case MemoryType.WsWorkRam:
+				case MemoryType.St018WorkRam:
+				case MemoryType.Pic18DataRam:
 					return ImportWorkRamLabels;
 
 				case MemoryType.SnesSaveRam:
@@ -117,12 +132,18 @@ namespace Mesen.Config
 				case MemoryType.SmsCartRam:
 				case MemoryType.GbaSaveRam:
 				case MemoryType.WsCartRam:
+				case MemoryType.WsCartEeprom:
+				case MemoryType.WsInternalEeprom:
 					return ImportSaveRamLabels;
 
-				default:
 				case MemoryType.None:
-					System.Diagnostics.Debug.Fail("Missing memory type case");
-					return true;
+					return false;
+
+				default:
+					//Unknown/unsupported memory type - fall back to the generic toggle.
+					//Never Debug.Fail here: UI builds define DEBUG, so Debug.Fail escalates
+					//to Environment.FailFast and kills the whole emulator (and MCP server).
+					return ImportOtherLabels;
 			}
 		}
 	}

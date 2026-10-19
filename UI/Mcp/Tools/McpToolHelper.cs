@@ -1,3 +1,7 @@
+using Avalonia.Threading;
+using Mesen.Debugger;
+using Mesen.Debugger.Labels;
+using Mesen.Debugger.Utilities;
 using Mesen.Interop;
 using Mesen.Mcp.Models;
 using ModelContextProtocol;
@@ -80,10 +84,34 @@ namespace Mesen.Mcp.Tools
 			if(!EmuApi.IsRunning()) {
 				throw new McpException("No ROM loaded.");
 			}
-			if(!_debuggerInitialized) {
+
+			bool debuggerRestarted = !DebugApi.IsDebuggerRunning();
+			if(debuggerRestarted) {
+				//The core debugger was either never started, or was released (e.g. when the
+				//last debug window was closed) and is now being recreated with empty tables
 				DebugApi.InitializeDebugger();
 				_debuggerInitialized = true;
 				EnableDefaultTracing();
+			}
+
+			//Make sure the debug workspace (symbol files like <rom>.mlb) is loaded for this ROM
+			DebugWorkspaceManager.EnsureLoaded();
+
+			if(debuggerRestarted) {
+				//A fresh core debugger starts with empty label/breakpoint tables - re-push them
+				LabelManager.RefreshLabels(false);
+				BreakpointManager.SetBreakpoints();
+			}
+		}
+
+		public static void OnUIThread(Action action)
+		{
+			//Workspace/label/breakpoint changes raise events that update debug window
+			//view models - always run them on the UI thread
+			if(Dispatcher.UIThread.CheckAccess()) {
+				action();
+			} else {
+				Dispatcher.UIThread.InvokeAsync(action).Wait();
 			}
 		}
 
