@@ -165,12 +165,16 @@ bool SerialPort::Open(const string& portName, uint32_t baudRate)
 	}
 
 	// Set timeouts: non-blocking reads (return immediately with whatever is available)
+	// Writes get a flat 1s total timeout: without one, WriteFile blocks *forever*
+	// when the peer stops draining (e.g. a com0com pair whose other end isn't
+	// being read), which wedged SerialPortBridge::Stop()'s thread join on every
+	// ROM reload. A healthy port never hits this timeout.
 	WinCOMMTIMEOUTS timeouts = {};
 	timeouts.ReadIntervalTimeout = _MAXDWORD;         // Return immediately between bytes
 	timeouts.ReadTotalTimeoutMultiplier = 0;
 	timeouts.ReadTotalTimeoutConstant = 0;             // No overall timeout — instant return
 	timeouts.WriteTotalTimeoutMultiplier = 0;
-	timeouts.WriteTotalTimeoutConstant = 0;
+	timeouts.WriteTotalTimeoutConstant = 1000;         // Never block a write longer than 1s
 	SetCommTimeouts(h, &timeouts);
 
 	SetupComm(h, 4096, 4096);
@@ -190,7 +194,12 @@ int SerialPort::Write(const uint8_t* data, int len)
 {
 	if(!IsOpen() || len <= 0) return 0;
 	unsigned long written = 0;
-	WriteFile(_handle, data, (unsigned long)len, &written, nullptr);
+	if(!WriteFile(_handle, data, (unsigned long)len, &written, nullptr)) {
+		//Write failed, timed out with nothing accepted (wedged peer), or the
+		//handle was closed to unblock us. -1 tells the caller to give up;
+		//a partial write (timeout hit mid-chunk) is returned as a positive count.
+		return (int)written > 0 ? (int)written : -1;
+	}
 	return (int)written;
 }
 
@@ -293,8 +302,22 @@ void SerialPort::Close()
 int SerialPort::Write(const uint8_t* data, int len)
 {
 	if(!IsOpen() || len <= 0) return 0;
-	int written = (int)write(FdFromHandle(_handle), data, (size_t)len);
-	return written > 0 ? written : 0;
+	int fd = FdFromHandle(_handle);
+
+	//Bound the wait for the port to accept data - a write must never block
+	//forever on a wedged peer (that would make SerialPortBridge::Stop()'s
+	//thread join hang every ROM reload).
+	fd_set writefds;
+	FD_ZERO(&writefds);
+	FD_SET(fd, &writefds);
+	struct timeval tv = {};
+	tv.tv_sec = 1;
+	if(select(fd + 1, nullptr, &writefds, nullptr, &tv) <= 0) {
+		return -1;
+	}
+
+	int written = (int)write(fd, data, (size_t)len);
+	return written > 0 ? written : -1;
 }
 
 int SerialPort::Read(uint8_t* buffer, int maxLen, uint32_t timeoutMs)

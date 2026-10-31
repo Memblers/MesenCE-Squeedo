@@ -236,10 +236,13 @@ void Pic18DisUtils::GetDisassembly(string& out, uint16_t opcode, uint32_t pc, ui
 		int16_t rel = opcode & 0x7FF;
 		if(rel & 0x400) rel |= ~0x7FF;
 		uint8_t sub = (opcode >> 11) & 0x1F;
+		//rel is a signed word offset relative to the next instruction (PC+1 in
+		//word addressing) - convert to a byte target: pc + 2 + rel*2
+		uint32_t target = pc + 2 + (int32_t)rel * 2;
 		if(sub == 0x1B) {
-			out = "RCALL $"; out += HexUtilities::ToHex((uint16_t)(pc + rel));
+			out = "RCALL $"; out += HexUtilities::ToHex((uint16_t)target);
 		} else {
-			out = "BRA $"; out += HexUtilities::ToHex((uint16_t)(pc + rel));
+			out = "BRA $"; out += HexUtilities::ToHex((uint16_t)target);
 		}
 		return;
 	}
@@ -270,7 +273,10 @@ void Pic18DisUtils::GetDisassembly(string& out, uint16_t opcode, uint32_t pc, ui
 		if((opc8 & 0xF8) == 0xE0) {
 			int8_t rel = (int8_t)(opcode & 0xFF);
 			const char* cond[] = { "BZ","BNZ","BC","BNC","BOV","BNOV","BN","BNN" };
-			out = cond[opc8 & 7]; out += " $"; out += HexUtilities::ToHex((uint16_t)(pc + rel));
+			//rel is a signed word offset relative to the next instruction (PC+1 in
+			//word addressing) - convert to a byte target: pc + 2 + rel*2
+			uint32_t target = pc + 2 + (int32_t)rel * 2;
+			out = cond[opc8 & 7]; out += " $"; out += HexUtilities::ToHex((uint16_t)target);
 			return;
 		}
 		out = "???"; return;

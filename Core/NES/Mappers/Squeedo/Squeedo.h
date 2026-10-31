@@ -140,13 +140,22 @@ protected:
 		// Start serial port bridge if enabled in config and Squeedo connection is desired
 		const NesConfig& cfg = _console->GetNesConfig();
 		if(cfg.SerialPortEnabled && cfg.SerialBridgeSqueedo && cfg.SerialPortName[0] != '\0') {
-			// Close any existing bridge from a previous ROM load
-			if(_sSerialBridge) {
-				_sSerialBridge->Stop();
-			}
-			_sSerialBridge.reset(new SerialPortBridge());
-			if(!_sSerialBridge->Start(cfg.SerialPortName, cfg.SerialBaudRate)) {
-				_sSerialBridge.reset();
+			// Reuse a healthy bridge across ROM reloads. Stopping/reopening the port
+			// on every load is what wedged reloads when the peer stopped draining:
+			// the reload thread joins the bridge thread here (see SerialPortBridge::Stop).
+			bool canReuse = _sSerialBridge && _sSerialBridge->IsRunning() && !_sSerialBridge->HasError()
+				&& _sSerialBridge->GetPortName() == cfg.SerialPortName && _sSerialBridge->GetBaudRate() == cfg.SerialBaudRate;
+			if(canReuse) {
+				_sSerialBridge->ClearQueues();
+			} else {
+				// Close any existing bridge from a previous ROM load
+				if(_sSerialBridge) {
+					_sSerialBridge->Stop();
+				}
+				_sSerialBridge.reset(new SerialPortBridge());
+				if(!_sSerialBridge->Start(cfg.SerialPortName, cfg.SerialBaudRate)) {
+					_sSerialBridge.reset();
+				}
 			}
 		}
 	}

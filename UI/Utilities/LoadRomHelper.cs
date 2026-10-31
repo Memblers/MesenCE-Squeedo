@@ -165,7 +165,27 @@ namespace Mesen.Utilities
 			//Block power cycle/power off/reload rom operations until the previous operation is done
 			//This helps prevent a lot of edge cases that could happen in the UI when e.g spamming reload rom
 			if(Interlocked.Increment(ref _reloadRequestCounter) == 1) {
-				Task.Run(() => EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = shortcut }));
+				Task.Run(() => {
+					try {
+						EmuApi.ExecuteShortcut(new ExecuteShortcutParams() { Shortcut = shortcut });
+					} finally {
+						if(shortcut == EmulatorShortcut.ExecPowerCycle) {
+							//Power cycle completes asynchronously on the emulation thread - the
+							//GameLoaded/GameLoadFailed notification releases its gate. Only recover
+							//here if the request was rejected outright (nothing running to cycle).
+							if(!EmuApi.IsRunning()) {
+								ResetReloadCounter();
+							}
+						} else {
+							//Reload rom / power off are fully synchronous. If the request was
+							//rejected (no game running, movie playing, ...) no GameLoaded/
+							//GameLoadFailed notification will ever arrive to release the gate -
+							//release it here so future reload/power cycle/power off requests are
+							//never silently ignored.
+							ResetReloadCounter();
+						}
+					}
+				});
 			}
 		}
 

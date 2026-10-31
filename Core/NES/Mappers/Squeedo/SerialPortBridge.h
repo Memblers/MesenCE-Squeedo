@@ -42,6 +42,10 @@ private:
 	std::atomic<uint64_t> _rxBytes { 0 };
 	std::chrono::steady_clock::time_point _lastStatusTime;
 
+	// Port currently open (for reuse checks across ROM reloads)
+	string _portName;
+	uint32_t _baudRate = 0;
+
 	void ThreadFunc()
 	{
 		uint8_t readBuf[256];
@@ -59,10 +63,20 @@ private:
 			}
 			if(txCount > 0) {
 				int written = _port.Write(txBuf, txCount);
-				// If write fails, port may have disconnected
-				if(written == 0 && txCount > 0) {
+				if(written < 0) {
+					//Write failed or the port accepted nothing before the timeout -
+					//the peer is wedged/disconnected. Stop the thread so Stop()'s join
+					//can complete and the emulator is never wedged behind the port.
 					_portError.store(true, std::memory_order_relaxed);
 					break;
+				}
+				if(written < txCount) {
+					//Partial write (timeout hit mid-chunk) - requeue the unsent
+					//tail at the front so no bytes are lost
+					LockHandler lock = _txLock.AcquireSafe();
+					for(int i = txCount - 1; i >= written; i--) {
+						_txQueue.push_front(txBuf[i]);
+					}
 				}
 			}
 
@@ -88,6 +102,10 @@ private:
 				std::this_thread::sleep_for(std::chrono::microseconds(100));
 			}
 		}
+
+		//Thread is gone (clean Stop() or write error) - reflect it so IsRunning()
+		//never reports a live bridge whose thread has already exited
+		_running.store(false, std::memory_order_relaxed);
 	}
 
 public:
@@ -107,7 +125,7 @@ public:
 	bool Start(const string& portName, uint32_t baudRate)
 	{
 		// If already open on the same port, just reuse
-		if(s_instance && s_instance->IsRunning()) {
+		if(s_instance && s_instance->IsRunning() && s_instance->GetPortName() == portName && s_instance->GetBaudRate() == baudRate) {
 			MessageManager::Log("[SerialPortBridge] Already open, reusing existing connection");
 			return true;
 		}
@@ -123,6 +141,8 @@ public:
 		_txBytes.store(0, std::memory_order_relaxed);
 		_rxBytes.store(0, std::memory_order_relaxed);
 		_lastStatusTime = std::chrono::steady_clock::now();
+		_portName = portName;
+		_baudRate = baudRate;
 		_thread = std::thread(&SerialPortBridge::ThreadFunc, this);
 		s_instance = this;
 
@@ -134,10 +154,15 @@ public:
 	{
 		if(s_instance == this) s_instance = nullptr;
 		_running.store(false, std::memory_order_relaxed);
+		//Close the port BEFORE joining: if the bridge thread is blocked inside a
+		//WriteFile/ReadFile on a wedged peer, closing the handle completes that I/O
+		//with an error so the thread sees _running == false and exits. Without this,
+		//a serial peer that stops draining hangs every ROM reload forever (the
+		//reload path joins this thread in Squeedo::InitMapper).
+		_port.Close();
 		if(_thread.joinable()) {
 			_thread.join();
 		}
-		_port.Close();
 
 		// Drain queues
 		{
@@ -152,6 +177,25 @@ public:
 
 	bool IsRunning() const { return _running.load(std::memory_order_relaxed) && _port.IsOpen(); }
 	bool HasError() const { return _portError.load(std::memory_order_relaxed); }
+	const string& GetPortName() const { return _portName; }
+	uint32_t GetBaudRate() const { return _baudRate; }
+
+	//Drop stale bytes (used when reusing the bridge across ROM reloads)
+	void ClearQueues()
+	{
+		{
+			LockHandler lock = _txLock.AcquireSafe();
+			_txQueue.clear();
+		}
+		{
+			LockHandler lock = _rxLock.AcquireSafe();
+			_rxQueue.clear();
+		}
+		{
+			LockHandler lock = _adapterRxLock.AcquireSafe();
+			_adapterRxQueue.clear();
+		}
+	}
 
 	// Called by emulation thread when PIC writes TXREG
 	void SendByte(uint8_t byte)
