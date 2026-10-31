@@ -21,6 +21,30 @@ string ScriptHost::GetLog()
 	return context ? context->GetLog() : "";
 }
 
+string ScriptHost::GetScriptName()
+{
+	shared_ptr<ScriptingContext> context = _context.lock();
+	return context ? context->GetScriptName() : "";
+}
+
+bool ScriptHost::IsInitDone()
+{
+	shared_ptr<ScriptingContext> context = _context.lock();
+	return context && context->CheckInitDone();
+}
+
+bool ScriptHost::HasError()
+{
+	shared_ptr<ScriptingContext> context = _context.lock();
+	return context && context->HasError();
+}
+
+string ScriptHost::GetLastError()
+{
+	shared_ptr<ScriptingContext> context = _context.lock();
+	return context ? context->GetLastError() : "";
+}
+
 bool ScriptHost::LoadScript(string scriptName, string path, string scriptContent, Debugger* debugger)
 {
 	_context.reset(new ScriptingContext(debugger));

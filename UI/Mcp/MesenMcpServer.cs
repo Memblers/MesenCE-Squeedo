@@ -8,6 +8,8 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.Protocol;
+using ModelContextProtocol.Server;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using System;
@@ -62,6 +64,7 @@ namespace Mesen.Mcp
 						options.SessionMode = HttpServerSessionMode.StatefulForInitializeClients;
 					})
 					.WithTools<DebugExecutionTools>()
+					.WithTools<DebugEventTools>()
 					.WithTools<DisassemblyTools>()
 					.WithTools<EmulatorTools>()
 					.WithTools<EmulatorConfigTools>()
@@ -74,6 +77,15 @@ namespace Mesen.Mcp
 					.WithTools<TraceTools>()
 					.WithPrompts<MesenMcpPrompts>()
 					.WithResources<MesenMcpResources>();
+
+				//Append an "unseen events" footer to every tool response so agents cannot
+				//miss crashes, Lua errors or rate spikes even when a call "succeeded".
+				builder.Services.Configure<McpServerOptions>(options => {
+					options.Filters.Request.CallToolFilters.Add(next => async (request, cancellationToken) => {
+						CallToolResult result = await next(request, cancellationToken);
+						return DebugEventAggregator.AppendFooter(request.Params?.Name, result);
+					});
+				});
 
 				_app = builder.Build();
 
@@ -124,6 +136,7 @@ namespace Mesen.Mcp
 				return;
 			}
 
+			DebugEventAggregator.OnRomLoaded();
 			InitializeDebuggerAndTracing();
 
 			if(isPowerCycle) {
@@ -141,6 +154,7 @@ namespace Mesen.Mcp
 		private void InitializeDebuggerAndTracing()
 		{
 			try {
+				DebugEventAggregator.EnsureInitialized();
 				if(EmuApi.IsRunning()) {
 					DebugApi.InitializeDebugger();
 					McpToolHelper.MarkDebuggerInitialized();

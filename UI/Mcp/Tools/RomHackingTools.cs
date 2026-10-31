@@ -162,6 +162,22 @@ namespace Mesen.Mcp.Tools
 
 			string log = DebugApi.GetScriptLog(scriptId);
 
+			//Surface syntax/runtime errors inline instead of silently failing
+			if(DebugApi.GetScriptInfo(scriptId, out ScriptInfoResult info) && info.HasError != 0) {
+				string err = info.GetLastErrorMessage();
+				if(info.InitDone == 0) {
+					//Script failed to compile/load - it never ran
+					DebugApi.RemoveScript(scriptId);
+					throw new McpException("Lua script failed to load: " + err);
+				}
+				if(!persistent) {
+					DebugApi.RemoveScript(scriptId);
+					throw new McpException("Lua runtime error: " + err + (string.IsNullOrEmpty(log) ? "" : "\n--- script log ---\n" + log));
+				}
+				//Persistent script: keep it loaded, report the error with its id
+				return "Script #" + scriptId + " running (persistent) but hit a runtime error: " + err + (string.IsNullOrEmpty(log) ? "" : "\n--- script log ---\n" + log);
+			}
+
 			if(!persistent) {
 				DebugApi.RemoveScript(scriptId);
 				return string.IsNullOrEmpty(log) ? "(no output)" : log;

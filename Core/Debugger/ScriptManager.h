@@ -29,6 +29,9 @@ public:
 	int32_t LoadScript(string name, string path, string content, int32_t scriptId);
 	void RemoveScript(int32_t scriptId);
 	string GetScriptLog(int32_t scriptId);
+	uint32_t GetScriptIds(int32_t* outIds, uint32_t maxCount);
+	bool GetScriptInfo(int32_t scriptId, string& name, bool& initDone, bool& hasError, string& lastError);
+	static bool ValidateScript(const string& scriptName, const string& content, string& errorOut);
 	void ProcessEvent(EventType type, CpuType cpuType);
 
 	void EnableCpuMemoryCallbacks() { _isCpuMemoryCallbackEnabled = true; }

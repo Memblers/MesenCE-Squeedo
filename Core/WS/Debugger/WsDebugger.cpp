@@ -18,6 +18,7 @@
 #include "Debugger/CallstackManager.h"
 #include "Debugger/BreakpointManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/CodeDataLogger.h"
 #include "Debugger/BaseEventManager.h"
@@ -122,8 +123,8 @@ void WsDebugger::ProcessInstruction()
 	_prevProgramCounter = pc;
 	_prevStackPointer = state.SP;
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::WsDebuggerEnabled)) {
-		if(_settings->GetDebugConfig().WsBreakOnInvalidOpCode && WsDisUtils::IsUndefinedOpCode(_prevOpCode)) {
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::WsDebuggerEnabled) || DebugEventLog::IsEnabled()) {
+		if(WsDisUtils::IsUndefinedOpCode(_prevOpCode) && DebugEventLog::HandleBreakOn(CpuType::Ws, BreakSource::BreakOnUndefinedOpCode, _settings->GetDebugConfig().WsBreakOnInvalidOpCode, pc, _prevOpCode)) {
 			_step->Break(BreakSource::BreakOnUndefinedOpCode);
 		}
 	}

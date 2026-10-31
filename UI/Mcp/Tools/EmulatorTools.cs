@@ -73,7 +73,7 @@ namespace Mesen.Mcp.Tools
 			CpuType mainCpu = info.ConsoleType.GetMainCpuType();
 			TimingInfo timing = EmuApi.GetTimingInfo(mainCpu);
 
-			return "Running " + info.ConsoleType + " " + info.GetRomName() + " " + Math.Round(timing.Fps, 2) + "fps frame=" + timing.FrameCount;
+			return "Running " + info.ConsoleType + " " + info.GetRomName() + " " + Math.Round(timing.Fps, 2) + "fps frame=" + timing.FrameCount + " | " + DebugEventAggregator.GetStatusSummary();
 		}
 
 		[McpServerTool(Name = "mesen_take_screenshot", ReadOnly = true, Destructive = false, OpenWorld = false),

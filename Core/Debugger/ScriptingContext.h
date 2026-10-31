@@ -42,6 +42,9 @@ private:
 	deque<string> _logRows;
 	SimpleLock _logLock;
 	bool _allowSaveState = false;
+	bool _hasError = false;
+	string _lastError;
+	SimpleLock _errorLock;
 
 	Debugger* _debugger = nullptr;
 	CpuType _defaultCpuType = {};
@@ -72,6 +75,9 @@ public:
 
 	void Log(string message);
 	string GetLog();
+
+	bool HasError();
+	string GetLastError();
 
 	Debugger* GetDebugger();
 	string GetScriptName();

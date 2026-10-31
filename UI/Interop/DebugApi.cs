@@ -195,6 +195,86 @@ namespace Mesen.Interop
 			}
 		}
 
+		//Debug event log (MCP observability)
+		[DllImport(DllPath)] public static extern void SetDebugEventsEnabled([MarshalAs(UnmanagedType.I1)] bool enabled);
+		[DllImport(DllPath)] public static extern void ResetDebugEvents();
+		[DllImport(DllPath)] public static extern void SetBreakEventPolicy(Int32 breakSource, Int32 policy);
+		[DllImport(DllPath)] public static extern Int32 GetBreakEventPolicy(Int32 breakSource);
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDebugCrashed();
+		[DllImport(DllPath)] public static extern void ClearDebugCrash();
+		[DllImport(DllPath)] public static extern void ArmMemoryWriteWatch(UInt32 startAddr, UInt32 endAddr, MemoryType memType);
+		[DllImport(DllPath)] public static extern void DisarmMemoryWriteWatch();
+
+		[DllImport(DllPath, EntryPoint = "PollDebugEvents")] private static extern UInt32 PollDebugEventsWrapper(IntPtr outRecords, UInt32 maxCount, UInt64 cursor, out UInt64 nextCursor);
+		public static unsafe DebugEventRecord[] PollDebugEvents(UInt64 cursor, out UInt64 nextCursor, UInt32 maxCount = 4096)
+		{
+			DebugEventRecord[] records = new DebugEventRecord[maxCount];
+			UInt32 count;
+			fixed(DebugEventRecord* ptr = records) {
+				count = DebugApi.PollDebugEventsWrapper((IntPtr)ptr, maxCount, cursor, out nextCursor);
+			}
+			Array.Resize(ref records, (int)count);
+			return records;
+		}
+
+		[DllImport(DllPath, EntryPoint = "GetMemoryWriteLog")] private static extern UInt32 GetMemoryWriteLogWrapper(IntPtr outRecords, UInt32 maxCount);
+		public static unsafe MemoryWriteRecord[] GetMemoryWriteLog(UInt32 maxCount = 256)
+		{
+			MemoryWriteRecord[] records = new MemoryWriteRecord[maxCount];
+			UInt32 count;
+			fixed(MemoryWriteRecord* ptr = records) {
+				count = DebugApi.GetMemoryWriteLogWrapper((IntPtr)ptr, maxCount);
+			}
+			Array.Resize(ref records, (int)count);
+			return records;
+		}
+
+		[DllImport(DllPath, EntryPoint = "GetBankSwitchLog")] private static extern UInt32 GetBankSwitchLogWrapper(IntPtr outRecords, UInt32 maxCount, UInt64 cursor, out UInt64 nextCursor);
+		public static unsafe BankSwitchRecord[] GetBankSwitchLog(UInt64 cursor, out UInt64 nextCursor, UInt32 maxCount = 512)
+		{
+			BankSwitchRecord[] records = new BankSwitchRecord[maxCount];
+			UInt32 count;
+			fixed(BankSwitchRecord* ptr = records) {
+				count = DebugApi.GetBankSwitchLogWrapper((IntPtr)ptr, maxCount, cursor, out nextCursor);
+			}
+			Array.Resize(ref records, (int)count);
+			return records;
+		}
+
+		[DllImport(DllPath, EntryPoint = "GetScriptIds")] private static extern UInt32 GetScriptIdsWrapper(IntPtr outIds, UInt32 maxCount);
+		public static unsafe Int32[] GetScriptIds(UInt32 maxCount = 64)
+		{
+			Int32[] ids = new Int32[maxCount];
+			UInt32 count;
+			fixed(Int32* ptr = ids) {
+				count = DebugApi.GetScriptIdsWrapper((IntPtr)ptr, maxCount);
+			}
+			Array.Resize(ref ids, (int)count);
+			return ids;
+		}
+
+		[DllImport(DllPath, EntryPoint = "GetScriptInfo")][return: MarshalAs(UnmanagedType.I1)] private static extern bool GetScriptInfoWrapper(Int32 scriptId, IntPtr outInfo);
+		public static unsafe bool GetScriptInfo(Int32 scriptId, out ScriptInfoResult info)
+		{
+			ScriptInfoResult result = new ScriptInfoResult();
+			bool found;
+			found = DebugApi.GetScriptInfoWrapper(scriptId, (IntPtr)(&result));
+			info = result;
+			return found;
+		}
+
+		[DllImport(DllPath, EntryPoint = "ValidateLuaScript")][return: MarshalAs(UnmanagedType.I1)] private static extern bool ValidateLuaScriptWrapper([MarshalAs(UnmanagedType.LPUTF8Str)] string name, [MarshalAs(UnmanagedType.LPUTF8Str)] string content, IntPtr outError, UInt32 maxLength);
+		public static unsafe bool ValidateLuaScript(string name, string content, out string error)
+		{
+			byte[] outError = new byte[2000];
+			bool valid;
+			fixed(byte* ptr = outError) {
+				valid = DebugApi.ValidateLuaScriptWrapper(name, content, (IntPtr)ptr, (UInt32)(outError.Length - 1));
+				error = Utf8Utilities.PtrToStringUtf8((IntPtr)ptr) ?? "";
+			}
+			return valid;
+		}
+
 		[DllImport(DllPath)] public static extern Int64 EvaluateExpression([MarshalAs(UnmanagedType.LPUTF8Str)] string expression, CpuType cpuType, out EvalResultType resultType, [MarshalAs(UnmanagedType.I1)] bool useCache);
 
 		[DllImport(DllPath)] public static extern DebuggerFeatures GetDebuggerFeatures(CpuType type);
@@ -1630,6 +1710,90 @@ namespace Mesen.Interop
 		public CpuType SourceCpu;
 		public MemoryOperationInfo Operation;
 		public Int32 BreakpointId;
+	}
+
+	public enum DebugEventKind
+	{
+		BreakEvent = 0,
+		Crash = 1,
+		Hang = 2,
+		LuaError = 3,
+		Message = 4
+	}
+
+	public enum DebugEventPolicy
+	{
+		Ignore = 0,
+		Report = 1,
+		Break = 2
+	}
+
+	public unsafe struct DebugEventRecord
+	{
+		public UInt64 Sequence;
+		public UInt64 FrameCount;
+		public Int32 EventType;
+		public Int32 Source;
+		public Int32 CpuType;
+		public UInt32 Pc;
+		public UInt32 MemAddress;
+		public Int32 MemValue;
+		public UInt32 Count;
+		public fixed byte Message[256];
+
+		public string GetMessage()
+		{
+			fixed(byte* ptr = Message) {
+				return Utf8Utilities.PtrToStringUtf8((IntPtr)ptr) ?? "";
+			}
+		}
+	}
+
+	public unsafe struct MemoryWriteRecord
+	{
+		public UInt64 FrameCount;
+		public UInt32 Pc;
+		public UInt32 Address;
+		public Int32 Value;
+		public Int32 CpuType;
+		public Int32 MemType;
+	}
+
+	public unsafe struct BankSwitchRecord
+	{
+		public UInt64 Sequence;
+		public UInt64 FrameCount;
+		public UInt32 Pc;
+		public Int32 OldOffset;
+		public Int32 NewOffset;
+		public UInt16 StartAddr;
+		public UInt16 EndAddr;
+		public Int16 PageNumber;
+		public byte IsChr;
+		public byte MemType;
+	}
+
+	public unsafe struct ScriptInfoResult
+	{
+		public Int32 ScriptId;
+		public byte InitDone;
+		public byte HasError;
+		public fixed byte Name[128];
+		public fixed byte LastError[512];
+
+		public string GetName()
+		{
+			fixed(byte* ptr = Name) {
+				return Utf8Utilities.PtrToStringUtf8((IntPtr)ptr) ?? "";
+			}
+		}
+
+		public string GetLastErrorMessage()
+		{
+			fixed(byte* ptr = LastError) {
+				return Utf8Utilities.PtrToStringUtf8((IntPtr)ptr) ?? "";
+			}
+		}
 	}
 
 	public enum CdlStripOption

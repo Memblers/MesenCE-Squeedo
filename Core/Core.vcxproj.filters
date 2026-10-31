@@ -52,6 +52,9 @@
     <ClInclude Include="Debugger\DebugTypes.h">
       <Filter>Debugger</Filter>
     </ClInclude>
+    <ClInclude Include="Debugger\DebugEventLog.h">
+      <Filter>Debugger</Filter>
+    </ClInclude>
     <ClInclude Include="Debugger\DebugUtilities.h">
       <Filter>Debugger</Filter>
     </ClInclude>
@@ -3108,6 +3111,9 @@
       <Filter>NES\Loaders</Filter>
     </ClCompile>
     <ClCompile Include="Debugger\DisassemblySearch.cpp">
+      <Filter>Debugger</Filter>
+    </ClCompile>
+    <ClCompile Include="Debugger\DebugEventLog.cpp">
       <Filter>Debugger</Filter>
     </ClCompile>
     <ClCompile Include="NES\Mappers\NSF\NsfMapper.cpp">

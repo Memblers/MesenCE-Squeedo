@@ -1,4 +1,5 @@
 #include "pch.h"
+#include "Lua/lua.hpp"
 #include "Debugger/ScriptManager.h"
 #include "Debugger/ScriptHost.h"
 #include "Debugger/DebugBreakHelper.h"
@@ -89,6 +90,48 @@ string ScriptManager::GetScriptLog(int32_t scriptId)
 		}
 	}
 	return "";
+}
+
+uint32_t ScriptManager::GetScriptIds(int32_t* outIds, uint32_t maxCount)
+{
+	auto lock = _scriptLock.AcquireSafe();
+	uint32_t count = 0;
+	for(unique_ptr<ScriptHost>& script : _scripts) {
+		if(count >= maxCount) {
+			break;
+		}
+		outIds[count++] = script->GetScriptId();
+	}
+	return count;
+}
+
+bool ScriptManager::GetScriptInfo(int32_t scriptId, string& name, bool& initDone, bool& hasError, string& lastError)
+{
+	auto lock = _scriptLock.AcquireSafe();
+	for(unique_ptr<ScriptHost>& script : _scripts) {
+		if(script->GetScriptId() == scriptId) {
+			name = script->GetScriptName();
+			initDone = script->IsInitDone();
+			hasError = script->HasError();
+			lastError = script->GetLastError();
+			return true;
+		}
+	}
+	return false;
+}
+
+bool ScriptManager::ValidateScript(const string& scriptName, const string& content, string& errorOut)
+{
+	//Compile-only check in a throwaway Lua state - the script is never executed
+	lua_State* lua = luaL_newstate();
+	int result = luaL_loadbufferx(lua, content.c_str(), content.size(), ("@" + scriptName).c_str(), nullptr);
+	bool valid = result == 0;
+	if(!valid) {
+		const char* msg = lua_tostring(lua, -1);
+		errorOut = msg ? msg : "unknown Lua error";
+	}
+	lua_close(lua);
+	return valid;
 }
 
 void ScriptManager::ProcessEvent(EventType type, CpuType cpuType)

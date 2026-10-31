@@ -20,6 +20,7 @@
 #include "Debugger/TraceLogFileSaver.h"
 #include "Debugger/CdlManager.h"
 #include "Debugger/ITraceLogger.h"
+#include "Debugger/DebugEventLog.h"
 #include "SNES/SnesCpuTypes.h"
 #include "SNES/SpcTypes.h"
 #include "SNES/Coprocessors/SA1/Sa1Types.h"
@@ -297,6 +298,10 @@ bool Debugger::ProcessMemoryWrite(uint32_t addr, T& value, MemoryOperationType o
 		return !_debuggers[(int)type].Debugger->GetFrozenAddressManager().IsFrozenAddress(addr);
 	}
 
+	if(DebugEventLog::IsWriteWatchArmed()) {
+		DebugEventLog::RecordMemoryWrite(type, GetProgramCounter(type, true), addr, (int32_t)value);
+	}
+
 	switch(type) {
 		case CpuType::Snes: GetDebugger<CpuType::Snes, SnesDebugger>()->ProcessWrite(addr, value, opType); break;
 		case CpuType::Spc: GetDebugger<CpuType::Spc, SpcDebugger>()->ProcessWrite<flags>(addr, value, opType); break;
@@ -341,6 +346,9 @@ void Debugger::ProcessMemoryAccess(uint32_t addr, T& value)
 
 	if constexpr(opType == MemoryOperationType::Write) {
 		_memoryAccessCounter->ProcessMemoryWrite<accessWidth>(addressInfo, _emu->GetMasterClock());
+		if(DebugEventLog::IsWriteWatchArmed()) {
+			DebugEventLog::RecordMemoryWrite(cpuType, GetProgramCounter(cpuType, true), addr, (int32_t)value);
+		}
 	} else {
 		_memoryAccessCounter->ProcessMemoryRead<accessWidth>(addressInfo, _emu->GetMasterClock());
 	}
@@ -855,7 +863,19 @@ void Debugger::BreakImmediately(CpuType sourceCpu, BreakSource source)
 		return;
 	}
 
-	if(IsDebugWindowOpened(sourceCpu) && IsBreakOptionEnabled(source)) {
+	//"Report" semantics: record the event for the MCP event log even when no break is wanted.
+	//Everything past InternalOperation is an "exception" type (BRK, unofficial opcodes, crashes, ...)
+	bool isException = source > BreakSource::InternalOperation;
+	if(isException && (DebugEventLog::GetPolicy(source) != DebugEventPolicy::Ignore || DebugEventLog::IsFatalSource(source))) {
+		DebugEventLog::RecordBreakEvent(sourceCpu, source, GetProgramCounter(sourceCpu, true));
+	}
+
+	//A policy of "Break" overrides the debugger-window requirement so MCP-driven debugging
+	//can pause the emulation even when no debug window is open.
+	DebugEventPolicy policy = DebugEventLog::GetPolicy(source);
+	if(policy == DebugEventPolicy::Break) {
+		SleepUntilResume(sourceCpu, source);
+	} else if(IsDebugWindowOpened(sourceCpu) && IsBreakOptionEnabled(source)) {
 		SleepUntilResume(sourceCpu, source);
 	}
 }

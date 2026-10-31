@@ -6,6 +6,7 @@
 #include "Debugger/CodeDataLogger.h"
 #include "Debugger/ScriptManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryDumper.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/ExpressionEvaluator.h"
@@ -122,10 +123,10 @@ void PceDebugger::ProcessInstruction()
 
 	_step->ProcessCpuExec();
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::PceDebuggerEnabled)) {
-		if(opCode == 0x00 && _settings->GetDebugConfig().PceBreakOnBrk) {
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::PceDebuggerEnabled) || DebugEventLog::IsEnabled()) {
+		if(opCode == 0x00 && DebugEventLog::HandleBreakOn(CpuType::Pce, BreakSource::BreakOnBrk, _settings->GetDebugConfig().PceBreakOnBrk, pc, opCode)) {
 			_step->Break(BreakSource::BreakOnBrk);
-		} else if(_settings->GetDebugConfig().PceBreakOnUnofficialOpCode && PceDisUtils::IsOpUnofficial(opCode)) {
+		} else if(PceDisUtils::IsOpUnofficial(opCode) && DebugEventLog::HandleBreakOn(CpuType::Pce, BreakSource::BreakOnUnofficialOpCode, _settings->GetDebugConfig().PceBreakOnUnofficialOpCode, pc, opCode)) {
 			_step->Break(BreakSource::BreakOnUnofficialOpCode);
 		}
 	}

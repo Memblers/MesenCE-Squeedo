@@ -5,6 +5,7 @@
 #include "Lua/luasocket.hpp"
 #include "Debugger/ScriptingContext.h"
 #include "Debugger/LuaApi.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/LuaCallHelper.h"
 #include "Debugger/DebugTypes.h"
 #include "Debugger/Debugger.h"
@@ -54,6 +55,11 @@ ScriptingContext::~ScriptingContext()
 bool ScriptingContext::LoadScript(string scriptName, string path, string scriptContent, Debugger* debugger)
 {
 	_scriptName = scriptName;
+	{
+		auto errLock = _errorLock.AcquireSafe();
+		_hasError = false;
+		_lastError.clear();
+	}
 
 	int iErr = 0;
 	_lua = luaL_newstate();
@@ -128,6 +134,12 @@ string ScriptingContext::GetErrorMessage()
 void ScriptingContext::ProcessLuaError()
 {
 	string errorMsg = GetErrorMessage();
+	{
+		auto errLock = _errorLock.AcquireSafe();
+		_hasError = true;
+		_lastError = errorMsg;
+	}
+	DebugEventLog::RecordLuaErrorEvent(_scriptName, errorMsg);
 	if(StringUtilities::Contains(errorMsg, "attempt to call a nil value (global 'require')") || StringUtilities::Contains(errorMsg, "attempt to index a nil value (global 'os')") || StringUtilities::Contains(errorMsg, "attempt to index a nil value (global 'io')")) {
 		Log("I/O and OS libraries are disabled by default for security.\nYou can enable them here:\nScript->Settings->Script Window->Restrictions->Allow access to I/O and OS functions.");
 	} else if(StringUtilities::Contains(errorMsg, "module 'socket.core' not found")) {
@@ -219,6 +231,18 @@ string ScriptingContext::GetLog()
 		ss << msg << "\n";
 	}
 	return ss.str();
+}
+
+bool ScriptingContext::HasError()
+{
+	auto lock = _errorLock.AcquireSafe();
+	return _hasError;
+}
+
+string ScriptingContext::GetLastError()
+{
+	auto lock = _errorLock.AcquireSafe();
+	return _lastError;
 }
 
 Debugger* ScriptingContext::GetDebugger()

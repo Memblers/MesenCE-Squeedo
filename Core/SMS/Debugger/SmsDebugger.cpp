@@ -17,6 +17,7 @@
 #include "Debugger/CallstackManager.h"
 #include "Debugger/BreakpointManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/ExpressionEvaluator.h"
 #include "Debugger/MemoryDumper.h"
@@ -99,8 +100,8 @@ void SmsDebugger::ProcessInstruction()
 
 	ProcessCallStackUpdates(addressInfo, pc, state.SP);
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::SmsDebuggerEnabled)) {
-		if(value == 0x40 && _settings->GetDebugConfig().SmsBreakOnNopLoad) {
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::SmsDebuggerEnabled) || DebugEventLog::IsEnabled()) {
+		if(value == 0x40 && DebugEventLog::HandleBreakOn(CpuType::Sms, BreakSource::SmsNopLoad, _settings->GetDebugConfig().SmsBreakOnNopLoad, pc, value)) {
 			//Break on ld b, b
 			_step->Break(BreakSource::SmsNopLoad);
 		}

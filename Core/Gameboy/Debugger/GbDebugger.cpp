@@ -13,6 +13,7 @@
 #include "Debugger/CallstackManager.h"
 #include "Debugger/BreakpointManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/ExpressionEvaluator.h"
 #include "Debugger/MemoryDumper.h"
@@ -103,10 +104,10 @@ void GbDebugger::ProcessInstruction()
 
 	ProcessCallStackUpdates(addressInfo, pc, state.SP);
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::GbDebuggerEnabled)) {
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::GbDebuggerEnabled) || DebugEventLog::IsEnabled()) {
 		switch(value) {
 			case 0x40:
-				if(_settings->GetDebugConfig().GbBreakOnNopLoad) {
+				if(DebugEventLog::HandleBreakOn(CpuType::Gameboy, BreakSource::GbNopLoad, _settings->GetDebugConfig().GbBreakOnNopLoad, pc, value)) {
 					_step->Break(BreakSource::GbNopLoad);
 				}
 				break;
@@ -122,7 +123,7 @@ void GbDebugger::ProcessInstruction()
 			case 0xF4:
 			case 0xFC:
 			case 0xFD:
-				if(_settings->GetDebugConfig().GbBreakOnInvalidOpCode) {
+				if(DebugEventLog::HandleBreakOn(CpuType::Gameboy, BreakSource::GbInvalidOpCode, _settings->GetDebugConfig().GbBreakOnInvalidOpCode, pc, value)) {
 					_step->Break(BreakSource::GbInvalidOpCode);
 				}
 				break;

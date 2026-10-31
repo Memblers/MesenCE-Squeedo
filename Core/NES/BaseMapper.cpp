@@ -7,7 +7,9 @@
 #include "NES/NesMemoryManager.h"
 #include "NES/RomData.h"
 #include "NES/Epsm.h"
+#include "NES/NesCpu.h"
 #include "Debugger/DebugTypes.h"
+#include "Debugger/DebugEventLog.h"
 #include "Shared/MessageManager.h"
 #include "Shared/BatteryManager.h"
 #include "Shared/EmuSettings.h"
@@ -129,6 +131,12 @@ void BaseMapper::SetCpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, int16
 	}
 }
 
+static uint32_t GetMapperLogPc(NesConsole* console)
+{
+	NesCpu* cpu = console ? console->GetCpu() : nullptr;
+	return cpu ? cpu->GetState().PC : 0;
+}
+
 void BaseMapper::SetCpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, PrgMemoryType type, uint32_t sourceOffset, int8_t accessType)
 {
 	uint8_t* source = nullptr;
@@ -155,10 +163,16 @@ void BaseMapper::SetCpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, PrgMe
 
 	int firstSlot = startAddr >> 8;
 	int slotCount = (endAddr - startAddr + 1) >> 8;
+	bool logBanks = DebugEventLog::IsEnabled();
+	uint32_t mapperPc = logBanks ? GetMapperLogPc(_console) : 0;
 	for(int i = 0; i < slotCount; i++) {
+		int32_t oldOffset = _prgMemoryOffset[firstSlot + i];
 		if(sourceSize == 0 || accessType == 0) {
 			_prgPages[i] = nullptr;
 			_prgMemoryAccess[i] = MemoryAccessType::NoAccess;
+			if(logBanks) {
+				DebugEventLog::RecordBankSwitch(mapperPc, false, -1, (uint16_t)(startAddr + i * 0x100), (uint16_t)(startAddr + i * 0x100 + 0xFF), oldOffset, -1, (uint8_t)type);
+			}
 		} else {
 			while(sourceOffset >= sourceSize) {
 				sourceOffset -= sourceSize;
@@ -167,6 +181,9 @@ void BaseMapper::SetCpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, PrgMe
 			_prgMemoryOffset[firstSlot + i] = sourceOffset + i * 0x100;
 			_prgMemoryType[firstSlot + i] = type;
 			_prgMemoryAccess[firstSlot + i] = (MemoryAccessType)accessType;
+			if(logBanks) {
+				DebugEventLog::RecordBankSwitch(mapperPc, false, -1, (uint16_t)(startAddr + i * 0x100), (uint16_t)(startAddr + i * 0x100 + 0xFF), oldOffset, (int32_t)(sourceOffset + i * 0x100), (uint8_t)type);
+			}
 		}
 	}
 
@@ -199,7 +216,12 @@ void BaseMapper::RemoveCpuMemoryMapping(uint16_t startAddr, uint16_t endAddr)
 	//Unmap this section of memory (causing open bus behavior)
 	int firstSlot = startAddr >> 8;
 	int slotCount = (endAddr - startAddr + 1) >> 8;
+	bool logRemovals = DebugEventLog::IsEnabled();
+	uint32_t removalPc = logRemovals ? GetMapperLogPc(_console) : 0;
 	for(int i = 0; i < slotCount; i++) {
+		if(logRemovals) {
+			DebugEventLog::RecordBankSwitch(removalPc, false, -1, (uint16_t)(startAddr + i * 0x100), (uint16_t)(startAddr + i * 0x100 + 0xFF), _prgMemoryOffset[firstSlot + i], -1, (uint8_t)PrgMemoryType::PrgRom);
+		}
 		_prgMemoryOffset[firstSlot + i] = -1;
 		_prgMemoryType[firstSlot + i] = PrgMemoryType::PrgRom;
 		_prgMemoryAccess[firstSlot + i] = MemoryAccessType::NoAccess;
@@ -319,10 +341,16 @@ void BaseMapper::SetPpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, ChrMe
 
 	int firstSlot = startAddr >> 8;
 	int slotCount = (endAddr - startAddr + 1) >> 8;
+	bool logChrBanks = DebugEventLog::IsEnabled();
+	uint32_t chrPc = logChrBanks ? GetMapperLogPc(_console) : 0;
 	for(int i = 0; i < slotCount; i++) {
+		int32_t oldOffset = _chrMemoryOffset[firstSlot + i];
 		if(sourceSize == 0 || accessType == 0) {
 			_chrPages[i] = nullptr;
 			_chrMemoryAccess[i] = MemoryAccessType::NoAccess;
+			if(logChrBanks) {
+				DebugEventLog::RecordBankSwitch(chrPc, true, -1, (uint16_t)(startAddr + i * 256), (uint16_t)(startAddr + i * 256 + 255), oldOffset, -1, (uint8_t)type);
+			}
 		} else {
 			while(sourceOffset >= sourceSize) {
 				sourceOffset -= sourceSize;
@@ -330,6 +358,9 @@ void BaseMapper::SetPpuMemoryMapping(uint16_t startAddr, uint16_t endAddr, ChrMe
 			_chrMemoryOffset[firstSlot + i] = sourceOffset + i * 256;
 			_chrMemoryType[firstSlot + i] = type;
 			_chrMemoryAccess[firstSlot + i] = (MemoryAccessType)accessType;
+			if(logChrBanks) {
+				DebugEventLog::RecordBankSwitch(chrPc, true, -1, (uint16_t)(startAddr + i * 256), (uint16_t)(startAddr + i * 256 + 255), oldOffset, (int32_t)(sourceOffset + i * 256), (uint8_t)type);
+			}
 		}
 	}
 

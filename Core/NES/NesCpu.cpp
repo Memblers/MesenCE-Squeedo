@@ -3,6 +3,7 @@
 #include <assert.h>
 #include "Utilities/Serializer.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "NES/NesCpu.h"
 #include "NES/NesPpu.h"
 #include "NES/APU/NesApu.h"
@@ -572,6 +573,7 @@ void NesCpu::HLT()
 	if(!_crashed) {
 		_crashed = true;
 		MessageManager::DisplayMessage("Error", "GameCrash", "Invalid OP code - CPU crashed.");
+		DebugEventLog::RecordBreakEvent(CpuType::Nes, BreakSource::NesBreakOnCpuCrash, _state.PC, _state.PC, 0);
 		_emu->BreakIfDebugging(CpuType::Nes, BreakSource::NesBreakOnCpuCrash);
 
 		if(!_emu->IsDebugging() && _console->GetRomFormat() == RomFormat::Nsf) {

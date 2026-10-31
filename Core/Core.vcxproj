@@ -717,6 +717,7 @@
     <ClInclude Include="Debugger\Debugger.h" />
     <ClInclude Include="Shared\Video\DebugHud.h" />
     <ClInclude Include="Debugger\DebugTypes.h" />
+    <ClInclude Include="Debugger\DebugEventLog.h" />
     <ClInclude Include="SNES\SnesDefaultVideoFilter.h" />
     <ClInclude Include="Debugger\Disassembler.h" />
     <ClInclude Include="Debugger\DisassemblyInfo.h" />
@@ -1026,6 +1027,7 @@
     <ClCompile Include="SNES\Debugger\Cx4Debugger.cpp" />
     <ClCompile Include="SNES\Debugger\Cx4DisUtils.cpp" />
     <ClCompile Include="Debugger\Debugger.cpp" />
+    <ClCompile Include="Debugger\DebugEventLog.cpp" />
     <ClCompile Include="Shared\Video\DebugHud.cpp" />
     <ClCompile Include="Shared\Video\DebugStats.cpp" />
     <ClCompile Include="SNES\Debugger\TraceLogger\Cx4TraceLogger.cpp" />

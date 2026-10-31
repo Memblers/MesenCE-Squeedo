@@ -16,6 +16,7 @@
 #include "Core/Debugger/CallstackManager.h"
 #include "Core/Debugger/LabelManager.h"
 #include "Core/Debugger/ScriptManager.h"
+#include "Core/Debugger/DebugEventLog.h"
 #include "Core/Debugger/Profiler.h"
 #include "Core/Debugger/IAssembler.h"
 #include "Core/NES/Mappers/Squeedo/Pic18Types.h"
@@ -600,5 +601,95 @@ extern "C"
 	DllExport bool __stdcall SaveRomToDisk(char* filename, bool saveIpsFile, CdlStripOption cdlStripOption)
 	{
 		return WithDebugger(bool, SaveRomToDisk(filename, saveIpsFile, cdlStripOption));
+	}
+
+	//Debug event log (MCP observability)
+	DllExport void __stdcall SetDebugEventsEnabled(bool enabled)
+	{
+		DebugEventLog::SetEnabled(_emu.get(), enabled);
+	}
+
+	DllExport void __stdcall ResetDebugEvents()
+	{
+		DebugEventLog::Reset();
+	}
+
+	DllExport uint32_t __stdcall PollDebugEvents(DebugEventRecord* outRecords, uint32_t maxCount, uint64_t cursor, uint64_t* outNextCursor)
+	{
+		return DebugEventLog::GetEvents(outRecords, maxCount, cursor, outNextCursor);
+	}
+
+	DllExport void __stdcall SetBreakEventPolicy(int32_t breakSource, int32_t policy)
+	{
+		DebugEventLog::SetPolicy((BreakSource)breakSource, (DebugEventPolicy)policy);
+	}
+
+	DllExport int32_t __stdcall GetBreakEventPolicy(int32_t breakSource)
+	{
+		return (int32_t)DebugEventLog::GetPolicy((BreakSource)breakSource);
+	}
+
+	DllExport bool __stdcall IsDebugCrashed()
+	{
+		return DebugEventLog::IsCrashed();
+	}
+
+	DllExport void __stdcall ClearDebugCrash()
+	{
+		DebugEventLog::ClearCrash();
+	}
+
+	DllExport void __stdcall ArmMemoryWriteWatch(uint32_t startAddr, uint32_t endAddr, MemoryType memType)
+	{
+		DebugEventLog::ArmWriteWatch(startAddr, endAddr, memType);
+	}
+
+	DllExport void __stdcall DisarmMemoryWriteWatch()
+	{
+		DebugEventLog::DisarmWriteWatch();
+	}
+
+	DllExport uint32_t __stdcall GetMemoryWriteLog(MemoryWriteRecord* outRecords, uint32_t maxCount)
+	{
+		return DebugEventLog::GetRecentWrites(outRecords, maxCount);
+	}
+
+	DllExport uint32_t __stdcall GetBankSwitchLog(BankSwitchRecord* outRecords, uint32_t maxCount, uint64_t cursor, uint64_t* outNextCursor)
+	{
+		return DebugEventLog::GetBankLog(outRecords, maxCount, cursor, outNextCursor);
+	}
+
+	//Lua script introspection
+	DllExport uint32_t __stdcall GetScriptIds(int32_t* outIds, uint32_t maxCount)
+	{
+		return WithTool(uint32_t, GetScriptManager(), GetScriptIds(outIds, maxCount));
+	}
+
+	DllExport bool __stdcall GetScriptInfo(int32_t scriptId, ScriptInfoResult* outInfo)
+	{
+		string name;
+		bool initDone = false;
+		bool hasError = false;
+		string lastError;
+		bool found = WithTool(bool, GetScriptManager(), GetScriptInfo(scriptId, name, initDone, hasError, lastError));
+		if(found && outInfo) {
+			memset(outInfo, 0, sizeof(ScriptInfoResult));
+			outInfo->ScriptId = scriptId;
+			outInfo->InitDone = initDone ? 1 : 0;
+			outInfo->HasError = hasError ? 1 : 0;
+			StringUtilities::CopyToBuffer(name, outInfo->Name, sizeof(outInfo->Name));
+			StringUtilities::CopyToBuffer(lastError, outInfo->LastError, sizeof(outInfo->LastError));
+		}
+		return found;
+	}
+
+	DllExport bool __stdcall ValidateLuaScript(char* name, char* content, char* outError, uint32_t maxLength)
+	{
+		string error;
+		bool valid = ScriptManager::ValidateScript(name ? name : "", content ? content : "", error);
+		if(!valid && outError) {
+			StringUtilities::CopyToBuffer(error, outError, maxLength);
+		}
+		return valid;
 	}
 };

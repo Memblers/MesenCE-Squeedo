@@ -1,5 +1,6 @@
 ﻿#include "pch.h"
 #include "Shared/MessageManager.h"
+#include "Debugger/DebugEventLog.h"
 
 std::unordered_map<string, string> MessageManager::_enResources = {
 	{ "Cheats", u8"Cheats" },
@@ -165,6 +166,8 @@ void MessageManager::DisplayMessage(string title, string message, string param1,
 		} else {
 			MessageManager::Log("[" + title + "] " + message);
 		}
+
+		DebugEventLog::RecordMessageEvent(title, message);
 	}
 }
 

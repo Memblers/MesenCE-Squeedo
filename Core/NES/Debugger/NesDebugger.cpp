@@ -6,6 +6,7 @@
 #include "Debugger/CodeDataLogger.h"
 #include "Debugger/ScriptManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/StepBackManager.h"
 #include "Debugger/MemoryDumper.h"
 #include "Debugger/MemoryAccessCounter.h"
@@ -135,12 +136,17 @@ void NesDebugger::ProcessInstruction()
 
 	_step->ProcessCpuExec();
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::NesDebuggerEnabled)) {
-		if(opCode == 0x00 && _settings->GetDebugConfig().NesBreakOnBrk) {
+	//Run the "break on" checks when a debug window is open OR when the MCP event log is
+	//active - report policies need these checks even without a debugger window.
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::NesDebuggerEnabled) || DebugEventLog::IsEnabled()) {
+		//"Break On..." checkboxes, plus MCP event policies: Report records the event without
+		//stopping, Break stops the emulation. Sources that are often legitimately used by games
+		//(BRK, unofficial opcodes) default to Report so agents always see them.
+		if(opCode == 0x00 && DebugEventLog::HandleBreakOn(CpuType::Nes, BreakSource::BreakOnBrk, _settings->GetDebugConfig().NesBreakOnBrk, pc, opCode)) {
 			_step->Break(BreakSource::BreakOnBrk);
-		} else if(_settings->GetDebugConfig().NesBreakOnUnofficialOpCode && NesDisUtils::IsOpUnofficial(opCode)) {
+		} else if(NesDisUtils::IsOpUnofficial(opCode) && DebugEventLog::HandleBreakOn(CpuType::Nes, BreakSource::BreakOnUnofficialOpCode, _settings->GetDebugConfig().NesBreakOnUnofficialOpCode, pc, opCode)) {
 			_step->Break(BreakSource::BreakOnUnofficialOpCode);
-		} else if(_settings->GetDebugConfig().NesBreakOnUnstableOpCode && NesDisUtils::IsOpUnstable(opCode)) {
+		} else if(NesDisUtils::IsOpUnstable(opCode) && DebugEventLog::HandleBreakOn(CpuType::Nes, BreakSource::BreakOnUnstableOpCode, _settings->GetDebugConfig().NesBreakOnUnstableOpCode, pc, opCode)) {
 			_step->Break(BreakSource::BreakOnUnstableOpCode);
 		}
 	}

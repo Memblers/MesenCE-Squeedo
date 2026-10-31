@@ -18,6 +18,7 @@
 #include "Debugger/CallstackManager.h"
 #include "Debugger/BreakpointManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/ExpressionEvaluator.h"
 #include "Debugger/MemoryDumper.h"
@@ -113,8 +114,8 @@ void GbaDebugger::ProcessInstruction()
 
 	ProcessCallStackUpdates(addressInfo, pc);
 
-	if(_settings->CheckDebuggerFlag(DebuggerFlags::GbaDebuggerEnabled)) {
-		if(((accessWidth == 2 && opCode == 0x46DB) || (accessWidth == 4 && opCode == 0xE1A0B00B)) && _settings->GetDebugConfig().GbaBreakOnNopLoad) {
+	if(_settings->CheckDebuggerFlag(DebuggerFlags::GbaDebuggerEnabled) || DebugEventLog::IsEnabled()) {
+		if(((accessWidth == 2 && opCode == 0x46DB) || (accessWidth == 4 && opCode == 0xE1A0B00B)) && DebugEventLog::HandleBreakOn(CpuType::Gba, BreakSource::GbaNopLoad, _settings->GetDebugConfig().GbaBreakOnNopLoad, pc, opCode)) {
 			//Break on MOV R11, R11
 			_step->Break(BreakSource::GbaNopLoad);
 		}

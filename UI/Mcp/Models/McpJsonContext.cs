@@ -21,5 +21,18 @@ namespace Mesen.Mcp.Models
 	[JsonSerializable(typeof(NesRomHeaderResponse))]
 	[JsonSerializable(typeof(SnesRomHeaderResponse))]
 
+	// Debug event observability (used by DebugEventTools/DebugEventAggregator)
+	[JsonSerializable(typeof(DebugEventGroupDto))]
+	[JsonSerializable(typeof(CrashInfoDto))]
+	[JsonSerializable(typeof(HangInfoDto))]
+	[JsonSerializable(typeof(DebugEventsReportDto))]
+	[JsonSerializable(typeof(CrashReportDto))]
+	[JsonSerializable(typeof(LuaScriptInfoDto))]
+	[JsonSerializable(typeof(LuaStatusReportDto))]
+	[JsonSerializable(typeof(MemoryWriteDto))]
+	[JsonSerializable(typeof(MemoryWriteReportDto))]
+	[JsonSerializable(typeof(BankSwitchDto))]
+	[JsonSerializable(typeof(BankLogReportDto))]
+
 	public partial class McpJsonContext : JsonSerializerContext { }
 }

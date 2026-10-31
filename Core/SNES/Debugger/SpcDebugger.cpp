@@ -11,6 +11,7 @@
 #include "Debugger/CallstackManager.h"
 #include "Debugger/BreakpointManager.h"
 #include "Debugger/Debugger.h"
+#include "Debugger/DebugEventLog.h"
 #include "Debugger/MemoryAccessCounter.h"
 #include "Debugger/ExpressionEvaluator.h"
 #include "Shared/EmuSettings.h"
@@ -85,11 +86,11 @@ void SpcDebugger::ProcessInstruction()
 
 	_step->ProcessCpuExec();
 
-	if(_debuggerEnabled) {
+	if(_debuggerEnabled || DebugEventLog::IsEnabled()) {
 		//Break on BRK/STP
-		if(value == 0x0F && _settings->GetDebugConfig().SpcBreakOnBrk) {
+		if(value == 0x0F && DebugEventLog::HandleBreakOn(CpuType::Spc, BreakSource::BreakOnBrk, _settings->GetDebugConfig().SpcBreakOnBrk, addr, value)) {
 			_step->Break(BreakSource::BreakOnBrk);
-		} else if((value == 0xFF || value == 0xEF) && _settings->GetDebugConfig().SpcBreakOnStpSleep) {
+		} else if((value == 0xFF || value == 0xEF) && DebugEventLog::HandleBreakOn(CpuType::Spc, BreakSource::BreakOnStp, _settings->GetDebugConfig().SpcBreakOnStpSleep, addr, value)) {
 			_step->Break(BreakSource::BreakOnStp);
 		}
 	}

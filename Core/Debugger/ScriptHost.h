@@ -19,6 +19,10 @@ public:
 
 	int GetScriptId();
 	string GetLog();
+	string GetScriptName();
+	bool IsInitDone();
+	bool HasError();
+	string GetLastError();
 
 	bool LoadScript(string scriptName, string path, string scriptContent, Debugger* debugger);
 	void RefreshMemoryCallbackFlags() { _context->RefreshMemoryCallbackFlags(); }
