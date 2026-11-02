@@ -51,7 +51,7 @@ See [COMPILING.md](COMPILING.md)
 
 Mesen is available under the GPL V3 license.  Full text here: <http://www.gnu.org/licenses/gpl-3.0.en.html>
 
-Copyright (C) 2014-2026 Sour, a2026 contributors
+Copyright (C) 2014-2026 Sour, 2026 contributors
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
