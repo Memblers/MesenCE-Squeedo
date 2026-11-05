@@ -178,8 +178,11 @@ int LuaApi::GetLibrary(lua_State* lua)
 		string name = string(entry.second);
 		name[0] = ::tolower(name[0]);
 		if(DebugUtilities::IsRelativeMemory(entry.first)) {
-			string debugName = name.substr(0, name.size() - 6) + "Debug";
-			LuaPushIntValue(lua, debugName, (int)entry.first | 0x100);
+			//CPU memory types also get a short alias without the "Memory" suffix
+			//(emu.memType.nes == emu.memType.nesMemory), matching the "xxxDebug" naming
+			string baseName = name.substr(0, name.size() - 6);
+			LuaPushIntValue(lua, baseName + "Debug", (int)entry.first | 0x100);
+			LuaPushIntValue(lua, baseName, (int)entry.first);
 		}
 		LuaPushIntValue(lua, name, (int)entry.first);
 	}
@@ -288,7 +291,8 @@ int LuaApi::SelectDrawSurface(lua_State* lua)
 int LuaApi::GetMemorySize(lua_State* lua)
 {
 	LuaCallHelper l(lua);
-	MemoryType memType = (MemoryType)l.ReadInteger();
+	//Sentinel default: nil/garbage fails checkEnum instead of silently becoming SnesMemory (0)
+	MemoryType memType = (MemoryType)l.ReadInteger(0xFFFFFFFF);
 	checkEnum(MemoryType, memType, "invalid memory type");
 	l.Return(_memoryDumper->GetMemorySize(memType));
 	return l.ReturnCount();
@@ -299,7 +303,7 @@ int LuaApi::ReadMemory(lua_State* lua)
 	LuaCallHelper l(lua);
 	l.ForceParamCount(3);
 	bool returnSignedValue = l.ReadBool();
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int address = l.ReadInteger();
@@ -314,7 +318,7 @@ int LuaApi::ReadMemory(lua_State* lua)
 int LuaApi::WriteMemory(lua_State* lua)
 {
 	LuaCallHelper l(lua);
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int value = l.ReadInteger();
@@ -332,7 +336,7 @@ int LuaApi::ReadMemory16(lua_State* lua)
 	LuaCallHelper l(lua);
 	l.ForceParamCount(3);
 	bool returnSignedValue = l.ReadBool();
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int address = l.ReadInteger();
@@ -349,7 +353,7 @@ int LuaApi::ReadMemory32(lua_State* lua)
 	LuaCallHelper l(lua);
 	l.ForceParamCount(3);
 	bool returnSignedValue = l.ReadBool();
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int address = l.ReadInteger();
@@ -364,7 +368,7 @@ int LuaApi::ReadMemory32(lua_State* lua)
 int LuaApi::WriteMemory16(lua_State* lua)
 {
 	LuaCallHelper l(lua);
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int value = l.ReadInteger();
@@ -380,7 +384,7 @@ int LuaApi::WriteMemory16(lua_State* lua)
 int LuaApi::WriteMemory32(lua_State* lua)
 {
 	LuaCallHelper l(lua);
-	int type = l.ReadInteger();
+	int type = l.ReadInteger(0xFFFFFFFF);
 	bool disableSideEffects = (type & 0x100) == 0x100;
 	MemoryType memType = (MemoryType)(type & 0xFF);
 	int value = l.ReadInteger();
@@ -1029,7 +1033,7 @@ int LuaApi::GetAccessCounters(lua_State* lua)
 {
 	LuaCallHelper l(lua);
 	AccessCounterType counterType = (AccessCounterType)l.ReadInteger();
-	MemoryType memoryType = (MemoryType)l.ReadInteger();
+	MemoryType memoryType = (MemoryType)l.ReadInteger(0xFFFFFFFF);
 	checkEnum(MemoryType, memoryType, "Invalid memory type");
 	checkEnum(AccessCounterType, counterType, "Invalid counter type");
 	checkparams();
@@ -1070,7 +1074,7 @@ int LuaApi::ResetAccessCounters(lua_State* lua)
 int LuaApi::GetCdlData(lua_State* lua)
 {
 	LuaCallHelper l(lua);
-	MemoryType memoryType = (MemoryType)l.ReadInteger();
+	MemoryType memoryType = (MemoryType)l.ReadInteger(0xFFFFFFFF);
 	checkEnum(MemoryType, memoryType, "Invalid memory type");
 	checkparams();
 
