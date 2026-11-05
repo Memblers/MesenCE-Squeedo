@@ -11,14 +11,15 @@ Pic18Peripherals::Pic18Peripherals(Pic18CpuState& state, NesConsole* console)
 {
 }
 
-uint8_t Pic18Peripherals::GetTimer0PrescalerDiv()
+uint16_t Pic18Peripherals::GetTimer0PrescalerDiv()
 {
 	// T0CON bits 2:0 = T0PS, prescaler divider = 2^(n+1)
+	// (T0PS=111 -> 256, which is why this returns uint16_t)
 	uint8_t ps = _state.Data[Pic18Sfr::T0CON & 0xFFF] & Pic18T0conBits::T0PS_MASK;
 	if(_state.Data[Pic18Sfr::T0CON & 0xFFF] & (1 << Pic18T0conBits::PSA)) {
 		return 1;  // Prescaler assigned to WDT, timer gets 1:1
 	}
-	return (uint8_t)(1 << (ps + 1));
+	return (uint16_t)(1 << (ps + 1));
 }
 
 uint8_t Pic18Peripherals::GetTimer1PrescalerDiv()
@@ -41,39 +42,17 @@ void Pic18Peripherals::ClockTimers(int cycles)
 
 	// Timer0
 	if(t0con & (1 << Pic18T0conBits::TMR0ON)) {
-		bool is8Bit = (t0con & (1 << Pic18T0conBits::T08BIT)) != 0;
 		bool useInternalClock = !(t0con & (1 << Pic18T0conBits::T0CS));
 
 		if(useInternalClock) {
-			uint8_t prescaler = GetTimer0PrescalerDiv();
+			uint16_t prescaler = GetTimer0PrescalerDiv();
 			_tmr0PrescalerCounter += cycles;
 			uint16_t ticks = _tmr0PrescalerCounter / prescaler;
 			_tmr0PrescalerCounter %= prescaler;
-
-			if(ticks > 0) {
-				if(is8Bit) {
-					uint16_t tmr0 = _state.Data[Pic18Sfr::TMR0L & 0xFFF] + ticks;
-					if(tmr0 > 0xFF) {
-						// Overflow: reload from TMR0H, set interrupt
-						tmr0 = _state.Data[Pic18Sfr::TMR0H & 0xFFF] + (tmr0 - 0x100);
-						if(tmr0 > 0xFF) tmr0 &= 0xFF;  // Second overflow (rare)
-						_state.INTCON |= Pic18IntconBits::TMR0IF;
-						_state.InterruptPending = true;
-					}
-					_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
-				} else {
-					uint32_t tmr0 = ((uint32_t)_state.Data[Pic18Sfr::TMR0H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR0L & 0xFFF];
-					tmr0 += ticks;
-					if(tmr0 > 0xFFFF) {
-						tmr0 = 0;  // 16-bit mode resets to 0
-						_state.INTCON |= Pic18IntconBits::TMR0IF;
-						_state.InterruptPending = true;
-					}
-					_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
-					_state.Data[Pic18Sfr::TMR0H & 0xFFF] = (uint8_t)(tmr0 >> 8);
-				}
-			}
+			IncrementTimer0(ticks);
 		}
+		// T0CS=1 (external clock on T0CKI): TMR0 is ticked by T0CKI edges
+		// instead — see ClockTimer0External (PPU A12 is wired to T0CKI).
 	}
 
 	// Timer1
@@ -132,6 +111,69 @@ void Pic18Peripherals::ClockTimers(int cycles)
 			_state.Data[Pic18Sfr::TXSTA & 0xFFF] |= (1 << Pic18TxstaBits::TRMT);  // Shift register empty
 		}
 	}
+}
+
+// Increment TMR0 by the given number of prescaler ticks (0 = no-op).
+// Handles both 8-bit (reload from TMR0H on overflow) and 16-bit modes.
+void Pic18Peripherals::IncrementTimer0(uint16_t ticks)
+{
+	if(ticks == 0) {
+		return;
+	}
+
+	bool is8Bit = (_state.Data[Pic18Sfr::T0CON & 0xFFF] & (1 << Pic18T0conBits::T08BIT)) != 0;
+	if(is8Bit) {
+		uint16_t tmr0 = _state.Data[Pic18Sfr::TMR0L & 0xFFF] + ticks;
+		if(tmr0 > 0xFF) {
+			// Overflow: reload from TMR0H, set interrupt
+			tmr0 = _state.Data[Pic18Sfr::TMR0H & 0xFFF] + (tmr0 - 0x100);
+			if(tmr0 > 0xFF) tmr0 &= 0xFF;  // Second overflow (rare)
+			_state.INTCON |= Pic18IntconBits::TMR0IF;
+			_state.InterruptPending = true;
+		}
+		_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
+	} else {
+		uint32_t tmr0 = ((uint32_t)_state.Data[Pic18Sfr::TMR0H & 0xFFF] << 8) | _state.Data[Pic18Sfr::TMR0L & 0xFFF];
+		tmr0 += ticks;
+		if(tmr0 > 0xFFFF) {
+			tmr0 = 0;  // 16-bit mode resets to 0
+			_state.INTCON |= Pic18IntconBits::TMR0IF;
+			_state.InterruptPending = true;
+		}
+		_state.Data[Pic18Sfr::TMR0L & 0xFFF] = (uint8_t)tmr0;
+		_state.Data[Pic18Sfr::TMR0H & 0xFFF] = (uint8_t)(tmr0 >> 8);
+	}
+}
+
+// One edge on the T0CKI pin (Timer0 external clock source). On the Squeedo
+// board the NES PPU's A12 line is wired to T0CKI, giving the firmware an
+// MMC3-style scanline counter: with sprites fetched from $1000, A12 rises 8x
+// per scanline (once per sprite fetch) and the T0PS prescaler folds those into
+// TMR0 ticks — T0CON = 0x22 (T0CS=1 external, T0SE=0 rising edge, T0PS=010
+// 1:8 prescaler) yields exactly one TMR0 increment per rendered scanline.
+// Only counted when the timer is on (TMR0ON), the external clock is selected
+// (T0CS=1) and the edge matches T0SE (0 = rising, 1 = falling).
+void Pic18Peripherals::ClockTimer0External(bool risingEdge)
+{
+	uint8_t t0con = _state.Data[Pic18Sfr::T0CON & 0xFFF];
+	if(!(t0con & (1 << Pic18T0conBits::TMR0ON))) {
+		return;  // Timer0 disabled
+	}
+	if(!(t0con & (1 << Pic18T0conBits::T0CS))) {
+		return;  // Internal clock selected, T0CKI is ignored
+	}
+	bool countRisingEdge = !(t0con & (1 << Pic18T0conBits::T0SE));
+	if(risingEdge != countRisingEdge) {
+		return;  // Edge polarity not selected by T0SE
+	}
+
+	// The external pulse feeds the same T0PS prescaler as the internal clock
+	// (PSA=1 assigns the prescaler to the WDT, so the timer gets edges 1:1).
+	uint16_t prescaler = GetTimer0PrescalerDiv();
+	_tmr0PrescalerCounter++;
+	uint16_t ticks = _tmr0PrescalerCounter / prescaler;
+	_tmr0PrescalerCounter %= prescaler;
+	IncrementTimer0(ticks);
 }
 
 uint8_t Pic18Peripherals::NesRead(uint8_t regAddr)

@@ -49,6 +49,9 @@ private:
 	uint8_t _lastPortB = 0xFF;  // SRAM bank bits (RB6-RB7)
 	uint8_t _lastPortC = 0xFF;  // CHR bank bits (RC1-RC2)
 
+	// Last PPU A12 level, for T0CKI edge detection (A12 is wired to T0CKI)
+	bool _lastA12 = false;
+
 protected:
 	uint16_t GetPrgPageSize() override { return 0x4000; }  // 16KB pages (2 per 32KB bank)
 	uint16_t GetChrPageSize() override { return 0x2000; }  // 8KB pages
@@ -60,6 +63,7 @@ protected:
 	uint16_t RegisterEndAddress() override { return 0x5FFF; }
 	bool AllowRegisterRead() override { return true; }
 	bool EnableCpuClockHook() override { return true; }
+	bool EnableVramAddressHook() override { return true; }  // PPU A12 -> PIC T0CKI
 	uint32_t GetNametableCount() override { return 4; }  // 4-screen
 
 	void InitMapper() override
@@ -306,6 +310,24 @@ protected:
 		}
 	}
 
+	// PPU A12 is wired to the PIC's T0CKI pin (Timer0 external clock input),
+	// providing an MMC3-style scanline counter without any NES CPU intervention.
+	// Every A12 transition is forwarded; ClockTimer0External applies the T0SE
+	// edge-polarity select and the T0PS prescaler. With sprites fetched from
+	// $1000 (A12 high) and BG from $0000, A12 rises once per sprite fetch =
+	// 8 rises per scanline; T0CON = 0x22 (1:8 prescaler) gives exactly one
+	// TMR0 increment per rendered scanline.
+	void NotifyVramAddressChange(uint16_t addr) override
+	{
+		bool a12 = (addr & 0x1000) != 0;
+		if(a12 != _lastA12) {
+			_lastA12 = a12;
+			if(_picPeripherals) {
+				_picPeripherals->ClockTimer0External(a12);
+			}
+		}
+	}
+
 	// Transparent PSP bridge at $5000-$5FFF — the mapper does NOT interpret register meanings.
 	// NES reads return whatever the PIC has pre-loaded on PortD.
 	// NES writes are delivered to the PIC via PSP interrupt.
@@ -375,6 +397,7 @@ protected:
 		SV(_lastPortA);
 		SV(_lastPortB);
 		SV(_lastPortC);
+		SV(_lastA12);
 
 		if(!s.IsSaving()) {
 			ApplyGpioBanking();

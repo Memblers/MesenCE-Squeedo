@@ -56,9 +56,10 @@ private:
 	bool _gpioDirty = false;
 
 	// Helper to get prescaler bits
-	uint8_t GetTimer0PrescalerDiv();
+	uint16_t GetTimer0PrescalerDiv();
 	uint8_t GetTimer1PrescalerDiv();
 	uint8_t GetTimer3PrescalerDiv();
+	void IncrementTimer0(uint16_t ticks);
 	uint16_t GetFSRAddr(int index);
 	uint8_t GetTosIndex();
 
@@ -85,6 +86,12 @@ public:
 
 	// Called once per PIC instruction cycle
 	void ClockTimers(int cycles);
+
+	// One edge on the T0CKI pin (Timer0 external clock source). On the Squeedo
+	// board the NES PPU's A12 line is wired to T0CKI, providing an MMC3-style
+	// scanline counter (see Squeedo::NotifyVramAddressChange). Only counted when
+	// TMR0ON=1, T0CS=1 (external clock) and the edge matches T0SE.
+	void ClockTimer0External(bool risingEdge);
 
 	// Returns true if PORTA/B/C were written since last check (clears the flag)
 	bool CheckAndClearGpioDirty() { if(_gpioDirty) { _gpioDirty = false; return true; } return false; }
