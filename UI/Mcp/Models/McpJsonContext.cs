@@ -23,6 +23,7 @@ namespace Mesen.Mcp.Models
 
 	// Debug event observability (used by DebugEventTools/DebugEventAggregator)
 	[JsonSerializable(typeof(DebugEventGroupDto))]
+	[JsonSerializable(typeof(ThrottledEventDto))]
 	[JsonSerializable(typeof(CrashInfoDto))]
 	[JsonSerializable(typeof(HangInfoDto))]
 	[JsonSerializable(typeof(DebugEventsReportDto))]

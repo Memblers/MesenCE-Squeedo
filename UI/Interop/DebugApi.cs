@@ -198,6 +198,7 @@ namespace Mesen.Interop
 		//Debug event log (MCP observability)
 		[DllImport(DllPath)] public static extern void SetDebugEventsEnabled([MarshalAs(UnmanagedType.I1)] bool enabled);
 		[DllImport(DllPath)] public static extern void ResetDebugEvents();
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsExecutionStopped();
 		[DllImport(DllPath)] public static extern void SetBreakEventPolicy(Int32 breakSource, Int32 policy);
 		[DllImport(DllPath)] public static extern Int32 GetBreakEventPolicy(Int32 breakSource);
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDebugCrashed();
@@ -215,6 +216,17 @@ namespace Mesen.Interop
 			}
 			Array.Resize(ref records, (int)count);
 			return records;
+		}
+
+		//Cumulative per-BreakSource counts of events that were throttled (not recorded) by the storm cap
+		[DllImport(DllPath, EntryPoint = "GetThrottledEventCounts")] private static extern void GetThrottledEventCountsWrapper(IntPtr outCounts, UInt32 maxCount);
+		public static unsafe UInt64[] GetThrottledEventCounts()
+		{
+			UInt64[] counts = new UInt64[64]; //DebugEventLog::MaxPolicyEntries
+			fixed(UInt64* ptr = counts) {
+				DebugApi.GetThrottledEventCountsWrapper((IntPtr)ptr, (UInt32)counts.Length);
+			}
+			return counts;
 		}
 
 		[DllImport(DllPath, EntryPoint = "GetMemoryWriteLog")] private static extern UInt32 GetMemoryWriteLogWrapper(IntPtr outRecords, UInt32 maxCount);

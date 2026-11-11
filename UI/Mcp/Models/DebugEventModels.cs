@@ -34,6 +34,12 @@ namespace Mesen.Mcp.Models
 		public long StalledMs { get; set; }
 	}
 
+	public class ThrottledEventDto
+	{
+		public string Source { get; set; } = "";
+		public ulong Count { get; set; }
+	}
+
 	public class DebugEventsReportDto
 	{
 		public string State { get; set; } = "running";
@@ -45,6 +51,7 @@ namespace Mesen.Mcp.Models
 		public ulong DroppedRecords { get; set; }
 		public bool WriteWatchArmed { get; set; }
 		public List<DebugEventGroupDto> Events { get; set; } = new();
+		public List<ThrottledEventDto> Throttled { get; set; } = new();
 		public List<string> Alerts { get; set; } = new();
 	}
 

@@ -24,6 +24,15 @@ static bool s_crashed = false;
 static uint64_t s_crashFrame = 0;
 static uint32_t s_crashPc = 0;
 
+//Per-source storm throttle state (lock-free - this runs on the emulation thread for every hit)
+struct ThrottleState
+{
+	std::atomic<uint64_t> Frame { 0 };
+	std::atomic<uint32_t> Hits { 0 };
+	std::atomic<uint64_t> Throttled { 0 };
+};
+static ThrottleState s_throttle[DebugEventLog::MaxPolicyEntries];
+
 static bool s_writeWatchArmed = false;
 static uint32_t s_writeStart = 0;
 static uint32_t s_writeEnd = 0;
@@ -54,6 +63,38 @@ bool DebugEventLog::IsEnabled()
 uint64_t DebugEventLog::GetFrameCount()
 {
 	return _emu ? _emu->GetFrameCount() : 0;
+}
+
+bool DebugEventLog::ThrottleAllowsCapture(int32_t sourceIdx)
+{
+	if(sourceIdx < 0 || sourceIdx >= MaxPolicyEntries) {
+		return true;
+	}
+
+	ThrottleState& t = s_throttle[sourceIdx];
+	uint64_t frame = GetFrameCount();
+	uint64_t window = t.Frame.load(std::memory_order_relaxed);
+	if(frame != window) {
+		//New frame - restart the capture window (best effort; a race here only skews the limit slightly)
+		t.Frame.store(frame, std::memory_order_relaxed);
+		t.Hits.store(0, std::memory_order_relaxed);
+	}
+
+	if(t.Hits.fetch_add(1, std::memory_order_relaxed) < MaxCapturedEventsPerSourcePerFrame) {
+		return true;
+	}
+
+	//Storm: skip the capture, just bump the aggregate counter
+	t.Throttled.fetch_add(1, std::memory_order_relaxed);
+	return false;
+}
+
+void DebugEventLog::GetThrottledEventCounts(uint64_t* outCounts, uint32_t maxCount)
+{
+	uint32_t count = std::min<uint32_t>(maxCount, MaxPolicyEntries);
+	for(uint32_t i = 0; i < count; i++) {
+		outCounts[i] = s_throttle[i].Throttled.load(std::memory_order_relaxed);
+	}
 }
 
 bool DebugEventLog::IsFatalSource(BreakSource source)
@@ -109,6 +150,13 @@ void DebugEventLog::RecordBreakEvent(CpuType cpuType, BreakSource source, uint32
 		lock.Release();
 
 		PushEvent(DebugEventKind::Crash, (int32_t)source, (int32_t)cpuType, pc, memAddr, memValue, nullptr);
+		return;
+	}
+
+	//Storm throttle: cap full captures per source per frame. A garbage-execution storm
+	//(e.g. running through PPU mirrors) hits thousands of times per frame - beyond the cap
+	//we only bump a lock-free counter instead of capturing a record.
+	if(!ThrottleAllowsCapture((int32_t)source)) {
 		return;
 	}
 
@@ -193,6 +241,11 @@ void DebugEventLog::Reset()
 	s_crashed = false;
 	s_crashFrame = 0;
 	s_crashPc = 0;
+	for(ThrottleState& t : s_throttle) {
+		t.Frame.store(0, std::memory_order_relaxed);
+		t.Hits.store(0, std::memory_order_relaxed);
+		t.Throttled.store(0, std::memory_order_relaxed);
+	}
 	//Policies and write watch are kept - they are configuration, not state
 }
 

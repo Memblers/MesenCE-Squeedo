@@ -619,6 +619,11 @@ extern "C"
 		return DebugEventLog::GetEvents(outRecords, maxCount, cursor, outNextCursor);
 	}
 
+	DllExport void __stdcall GetThrottledEventCounts(uint64_t* outCounts, uint32_t maxCount)
+	{
+		DebugEventLog::GetThrottledEventCounts(outCounts, maxCount);
+	}
+
 	DllExport void __stdcall SetBreakEventPolicy(int32_t breakSource, int32_t policy)
 	{
 		DebugEventLog::SetPolicy((BreakSource)breakSource, (DebugEventPolicy)policy);

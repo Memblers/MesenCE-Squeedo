@@ -108,8 +108,8 @@ namespace Mesen.Mcp
 				LastError = null;
 				_logger?.LogInformation("MCP server started on port {Port}", port);
 
-				// Auto-initialize debugger and enable tracing for the main CPU
-				InitializeDebuggerAndTracing();
+				// Auto-initialize the debugger/event log (tracing is opt-in via mesen_set_trace_options)
+				InitializeDebuggerAndEventLog();
 			} catch(Exception ex) {
 				LastError = ex.ToString();
 				_isRunning = false;
@@ -126,7 +126,7 @@ namespace Mesen.Mcp
 		}
 
 		/// <summary>
-		/// Called when a ROM is loaded so we can re-initialize the debugger and tracing,
+		/// Called when a ROM is loaded so we can re-initialize the debugger and event log,
 		/// and load the debug workspace (symbol/label files like <rom>.mlb) so MCP tools
 		/// can resolve labels without requiring a debug window to be opened first.
 		/// </summary>
@@ -137,7 +137,7 @@ namespace Mesen.Mcp
 			}
 
 			DebugEventAggregator.OnRomLoaded();
-			InitializeDebuggerAndTracing();
+			InitializeDebuggerAndEventLog();
 
 			if(isPowerCycle) {
 				//On power cycle, the core debugger is recreated - re-push labels and
@@ -151,14 +151,13 @@ namespace Mesen.Mcp
 			}
 		}
 
-		private void InitializeDebuggerAndTracing()
+		private void InitializeDebuggerAndEventLog()
 		{
 			try {
 				DebugEventAggregator.EnsureInitialized();
 				if(EmuApi.IsRunning()) {
 					DebugApi.InitializeDebugger();
 					McpToolHelper.MarkDebuggerInitialized();
-					McpToolHelper.EnableDefaultTracing();
 				}
 			} catch(Exception ex) {
 				_logger?.LogWarning(ex, "Failed to auto-initialize debugger");

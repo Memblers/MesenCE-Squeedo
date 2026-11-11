@@ -13,7 +13,7 @@ namespace Mesen.Mcp.Tools
 	public class DebugEventTools
 	{
 		[McpServerTool(Name = "mesen_get_events", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Get the aggregated debug event log: crashes, break-on events (BRK, unofficial opcodes, ...), Lua errors, OSD messages. Events are aggregated by (kind, source, PC) with counts, frames and rates. Returns JSON with state (running/paused/hung/crashed), crash info and alerts.")]
+		 Description("Get the aggregated debug event log: crashes, break-on events (BRK, unofficial opcodes, ...), Lua errors, OSD messages. Events are aggregated by (kind, source, PC) with counts, frames and rates. Returns JSON with state (running/paused/hung/crashed), crash info and alerts. The 'throttled' list counts events that were skipped by the per-frame storm cap.")]
 		public static string GetEvents(
 			[Description("Include aggregated OSD message events (default false)")] bool includeMessages = false)
 		{
@@ -21,7 +21,7 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_set_event_policy", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Set what happens when a debug event fires: mode 'ignore' (silent), 'report' (record + surface in mesen_get_events, do NOT stop emulation), or 'break' (pause emulation and report). Use source='BreakOnBrk' etc. for one event type, or 'fatal'/'suspicious'/'all' for tiers. Default: fatal=break, suspicious=report. 'report' is recommended for sources games legitimately use (BRK, unofficial opcodes).")]
+		 Description("Set what happens when a debug event fires: mode 'ignore' (silent), 'report' (record + surface in mesen_get_events, do NOT stop emulation), or 'break' (pause emulation and report). Use source='BreakOnBrk' etc. for one event type, or 'fatal'/'suspicious'/'all' for tiers. Default: fatal=break, suspicious=ignore. Suspicious events (BRK, unofficial opcodes, invalid VRAM) fire constantly in normal games and can storm during garbage execution - only opt in to 'report' when hunting one of them; records are storm-throttled (per-frame capture cap).")]
 		public static string SetEventPolicy(
 			[Description("BreakSource name (e.g. 'BreakOnBrk', 'NesBreakOnCpuCrash') or tier: 'fatal', 'suspicious', 'all'")] string source,
 			[Description("Policy mode: 'ignore', 'report' or 'break'")] string mode)
@@ -78,7 +78,7 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_get_last_trace", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Get the last N executed instructions from the in-memory trace ring buffer (chronological order, oldest first). Unlike mesen_get_execution_trace this is always a tail view - useful to see what ran right before a crash or glitch.")]
+		 Description("Get the last N executed instructions from the in-memory trace ring buffer (chronological order, oldest first, capped at 30000 rows). Unlike mesen_get_execution_trace this is always a tail view - useful to see what ran right before a crash or glitch. Tracing is off by default: enable it first with mesen_set_trace_options.")]
 		public static string GetLastTrace(
 			[Description("Number of instructions to return (default 50, max 1000)")] int count = 50,
 			[Description("Optional CPU type filter (Nes, Snes, Gameboy, Gba, Pce, Sms, Ws)")] string? cpuType = null)
@@ -101,7 +101,7 @@ namespace Mesen.Mcp.Tools
 				}
 				sb.Append('$').Append(rows[i].ProgramCounter.ToString("X4")).Append(": ").AppendLine(rows[i].GetOutput());
 			}
-			return sb.Length > 0 ? sb.ToString() : "(trace buffer empty - tracing is enabled automatically when the MCP server starts)";
+			return sb.Length > 0 ? sb.ToString() : "(trace buffer empty - tracing is off by default, enable it with mesen_set_trace_options)";
 		}
 
 		[McpServerTool(Name = "mesen_get_lua_status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),

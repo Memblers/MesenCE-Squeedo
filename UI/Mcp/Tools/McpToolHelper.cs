@@ -26,32 +26,6 @@ namespace Mesen.Mcp.Tools
 			_debuggerInitialized = true;
 		}
 
-		public static void EnableDefaultTracing()
-		{
-			if(!EmuApi.IsRunning()) return;
-
-			RomInfo info = EmuApi.GetRomInfo();
-			CpuType mainCpu = info.ConsoleType.GetMainCpuType();
-			EnableTracingForCpu(mainCpu);
-		}
-
-		public static void EnableTracingForCpu(CpuType cpu)
-		{
-			string format = GetDefaultTraceFormat(cpu);
-
-			InteropTraceLoggerOptions options = new() {
-				Enabled = true,
-				UseLabels = true,
-				IndentCode = false,
-				Format = Encoding.UTF8.GetBytes(format),
-				Condition = Encoding.UTF8.GetBytes("")
-			};
-			Array.Resize(ref options.Format, 1000);
-			Array.Resize(ref options.Condition, 1000);
-
-			DebugApi.SetTraceOptions(cpu, options);
-		}
-
 		public static string GetDefaultTraceFormat(CpuType cpuType)
 		{
 			return cpuType switch {
@@ -88,10 +62,11 @@ namespace Mesen.Mcp.Tools
 			bool debuggerRestarted = !DebugApi.IsDebuggerRunning();
 			if(debuggerRestarted) {
 				//The core debugger was either never started, or was released (e.g. when the
-				//last debug window was closed) and is now being recreated with empty tables
+				//last debug window was closed) and is now being recreated with empty tables.
+				//Tracing stays opt-in (mesen_set_trace_options) - auto-enabling full instruction
+				//tracing is too expensive during garbage/crash storms.
 				DebugApi.InitializeDebugger();
 				_debuggerInitialized = true;
-				EnableDefaultTracing();
 			}
 
 			//Make sure the debug workspace (symbol files like <rom>.mlb) is loaded for this ROM

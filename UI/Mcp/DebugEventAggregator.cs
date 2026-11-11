@@ -6,11 +6,13 @@ using Mesen.Mcp.Tools;
 using ModelContextProtocol;
 using ModelContextProtocol.Protocol;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading;
 
 namespace Mesen.Mcp
 {
@@ -50,9 +52,41 @@ namespace Mesen.Mcp
 			public string Key => Kind + "|" + (int)Source + "|" + Pc;
 		}
 
+		//Per-source aggregation used to batch storm alerts (one summary per source per drain)
+		private class EventStormStats
+		{
+			public ulong Total;
+			public ulong NewSites;
+			public uint MinPc;
+			public uint MaxPc;
+			public ulong Throttled;
+			public bool Spike;
+			public double SpikeRate;
+		}
+
+		//Minimal marker queued from the emulation thread, applied later on the MCP thread
+		private class PendingNotification
+		{
+			public ConsoleNotificationType Type;
+			public BreakSource Source = BreakSource.Unspecified;
+			public CpuType Cpu;
+		}
+
 		private static readonly object _lock = new();
 		private static bool _initialized;
 		private static NotificationListener? _listener;
+
+		//Notifications arrive on the emulation thread (synchronous native callback). They are
+		//queued here with no locks and no core calls, and applied on the MCP thread in Drain()
+		//via ProcessPendingNotifications() - inline capture on the emulation thread is what
+		//used to starve the debugger/palette windows during an event storm.
+		private const int MaxPendingNotifications = 256;
+		private static readonly ConcurrentQueue<PendingNotification> _pendingNotifications = new();
+		private static int _pendingNotificationCount;
+		private static bool _notificationSyncNeeded;
+
+		//Last-seen cumulative per-source throttle counters (core-side storm cap)
+		private static readonly ulong[] _lastThrottleCounts = new ulong[64];
 
 		private static ulong _eventCursor;
 		private static ulong _bankCursor;
@@ -125,8 +159,11 @@ namespace Mesen.Mcp
 			foreach(BreakSource src in FatalTier) {
 				DebugApi.SetBreakEventPolicy((int)src, (int)DebugEventPolicy.Break);
 			}
+			//Suspicious sources (BRK, unofficial opcodes, invalid VRAM, ...) fire constantly in
+			//normal games and storm during garbage execution - default them to Ignore. Recording
+			//them is opt-in via mesen_set_event_policy (records are storm-throttled in the core).
 			foreach(BreakSource src in SuspiciousTier) {
-				DebugApi.SetBreakEventPolicy((int)src, (int)DebugEventPolicy.Report);
+				DebugApi.SetBreakEventPolicy((int)src, (int)DebugEventPolicy.Ignore);
 			}
 		}
 
@@ -137,6 +174,7 @@ namespace Mesen.Mcp
 				_eventCursor = 0;
 				_bankCursor = 0;
 				_droppedRecords = 0;
+				Array.Clear(_lastThrottleCounts, 0, _lastThrottleCounts.Length);
 				_groups.Clear();
 				_order.Clear();
 				_pendingAlerts.Clear();
@@ -150,20 +188,52 @@ namespace Mesen.Mcp
 			}
 		}
 
+		//Runs on the emulation thread (synchronous native callback). This path must stay cheap:
+		//no core calls, no shared locks - just queue a minimal marker. All state changes
+		//(break reason, PC lookup, ...) are applied later on the MCP thread in
+		//ProcessPendingNotifications(), called from Drain() while the emu is free-running.
 		private static void OnNotification(NotificationEventArgs e)
 		{
-			lock(_lock) {
-				switch(e.NotificationType) {
+			bool critical = e.NotificationType == ConsoleNotificationType.GameLoaded || e.NotificationType == ConsoleNotificationType.GameReset;
+			if(!critical && Interlocked.CompareExchange(ref _pendingNotificationCount, 0, 0) >= MaxPendingNotifications) {
+				//Break storm - drop and force a state resync on the next drain
+				_notificationSyncNeeded = true;
+				return;
+			}
+
+			PendingNotification n = new() { Type = e.NotificationType };
+			if(e.NotificationType == ConsoleNotificationType.CodeBreak) {
+				try {
+					BreakEvent evt = Marshal.PtrToStructure<BreakEvent>(e.Parameter);
+					n.Source = evt.Source;
+					n.Cpu = evt.SourceCpu;
+				} catch { }
+			}
+
+			Interlocked.Increment(ref _pendingNotificationCount);
+			_pendingNotifications.Enqueue(n);
+		}
+
+		//Applies queued notifications on the MCP thread. Also recovers the break state when
+		//notifications had to be dropped during a storm.
+		private static void ProcessPendingNotifications()
+		{
+			while(_pendingNotifications.TryDequeue(out PendingNotification? n)) {
+				Interlocked.Decrement(ref _pendingNotificationCount);
+				switch(n.Type) {
 					case ConsoleNotificationType.CodeBreak: {
-						try {
-							BreakEvent evt = Marshal.PtrToStructure<BreakEvent>(e.Parameter);
-							uint pc = DebugApi.GetProgramCounter(evt.SourceCpu, true);
-							_breakActive = true;
-							_breakReason = evt.Source + " at $" + pc.ToString("X4") + " (frame " + SafeGetFrame() + ")";
-						} catch {
+						if(n.Source == BreakSource.Unspecified) {
 							_breakActive = true;
 							_breakReason = "break";
+							break;
 						}
+						uint pc = 0;
+						try {
+							//Safe to call now - this runs on the MCP thread, not the emulation thread
+							pc = DebugApi.GetProgramCounter(n.Cpu, true);
+						} catch { }
+						_breakActive = true;
+						_breakReason = n.Source + " at " + FormatPc(pc) + " (frame " + SafeGetFrame() + ")";
 						break;
 					}
 
@@ -189,6 +259,43 @@ namespace Mesen.Mcp
 						break;
 				}
 			}
+
+			if(_notificationSyncNeeded) {
+				_notificationSyncNeeded = false;
+				try {
+					if(!DebugApi.IsExecutionStopped()) {
+						_breakActive = false;
+						_breakReason = null;
+					}
+				} catch { }
+			}
+		}
+
+		//Folds the core-side storm throttle counters (events that were counted but not captured)
+		//into the per-source batch tracker so the summary alert reports them.
+		private static void RefreshThrottleCounts(Dictionary<BreakSource, EventStormStats> storms)
+		{
+			try {
+				ulong[] counts = DebugApi.GetThrottledEventCounts();
+				for(int i = 0; i < counts.Length && i < _lastThrottleCounts.Length; i++) {
+					ulong delta = counts[i] >= _lastThrottleCounts[i] ? counts[i] - _lastThrottleCounts[i] : counts[i];
+					_lastThrottleCounts[i] = counts[i];
+					if(delta > 0) {
+						EventStormStats stats = GetStormStats(storms, (BreakSource)i);
+						stats.Throttled += delta;
+						stats.Total += delta;
+					}
+				}
+			} catch { }
+		}
+
+		private static EventStormStats GetStormStats(Dictionary<BreakSource, EventStormStats> storms, BreakSource source)
+		{
+			if(!storms.TryGetValue(source, out EventStormStats? stats)) {
+				stats = new EventStormStats();
+				storms[source] = stats;
+			}
+			return stats;
 		}
 
 		private static ulong SafeGetFrame()
@@ -206,6 +313,12 @@ namespace Mesen.Mcp
 		//Also runs the hang watchdog. Returns the number of newly seen records.
 		private static int Drain()
 		{
+			//Apply queued emulator-thread notifications first (GameLoaded resets the cursor
+			//below), then fold the core-side throttle counters into the batch tracker.
+			Dictionary<BreakSource, EventStormStats> storms = new();
+			ProcessPendingNotifications();
+			RefreshThrottleCounts(storms);
+
 			int newRecords = 0;
 			try {
 				ulong nextCursor;
@@ -265,12 +378,26 @@ namespace Mesen.Mcp
 							break;
 
 						case DebugEventKind.BreakEvent:
-							if(group.NewCount == 1 && !expected) {
-								AddAlert("[mesen] new event: " + group.Source + " at " + FormatPc(rec.Pc) + (string.IsNullOrEmpty(msg) ? "" : " (" + Truncate(msg, 80) + ")"));
-							}
-							if(group.Spike && !group.SpikeAnnounced && !expected) {
-								group.SpikeAnnounced = true;
-								AddAlert("[mesen] ⚠ rate spike: " + group.Source + " at " + FormatPc(rec.Pc) + " (" + group.RatePerFrame.ToString("0.##") + "/frame) - possible crash loop");
+							if(!expected) {
+								//Batch per source - one summary alert per source per drain instead
+								//of one per PC (a garbage storm hits dozens of distinct PCs per frame)
+								EventStormStats stats = GetStormStats(storms, group.Source);
+								stats.Total++;
+								if(group.NewCount == 1) {
+									stats.NewSites++;
+									if(stats.NewSites == 1) {
+										stats.MinPc = rec.Pc;
+										stats.MaxPc = rec.Pc;
+									} else {
+										stats.MinPc = Math.Min(stats.MinPc, rec.Pc);
+										stats.MaxPc = Math.Max(stats.MaxPc, rec.Pc);
+									}
+								}
+								if(group.Spike && !group.SpikeAnnounced) {
+									group.SpikeAnnounced = true;
+									stats.Spike = true;
+									stats.SpikeRate = Math.Max(stats.SpikeRate, group.RatePerFrame);
+								}
 							}
 							break;
 
@@ -284,6 +411,22 @@ namespace Mesen.Mcp
 					_eventCursor = nextCursor;
 				}
 			} catch { }
+
+			//Batched storm alerts: at most one summary (plus one spike warning) per source per drain
+			foreach(KeyValuePair<BreakSource, EventStormStats> kv in storms) {
+				EventStormStats s = kv.Value;
+				string summary = "[mesen] " + kv.Key + " x" + s.Total;
+				if(s.NewSites > 0) {
+					summary += ", " + s.NewSites + " new site(s) " + FormatPc(s.MinPc) + "-" + FormatPc(s.MaxPc);
+				}
+				if(s.Throttled > 0) {
+					summary += " (+" + s.Throttled + " throttled by storm cap)";
+				}
+				AddAlert(summary);
+				if(s.Spike) {
+					AddAlert("[mesen] ⚠ rate spike: " + kv.Key + " (" + s.SpikeRate.ToString("0.##") + "/frame) - possible crash loop");
+				}
+			}
 
 			PollHang();
 			return newRecords;
@@ -491,6 +634,16 @@ namespace Mesen.Mcp
 					};
 				}
 
+				try {
+					//Events skipped by the core-side storm cap (cumulative since ROM load/reset)
+					ulong[] throttled = DebugApi.GetThrottledEventCounts();
+					for(int i = 0; i < throttled.Length; i++) {
+						if(throttled[i] > 0) {
+							report.Throttled.Add(new ThrottledEventDto { Source = ((BreakSource)i).ToString(), Count = throttled[i] });
+						}
+					}
+				} catch { }
+
 				foreach(EventGroup group in _order) {
 					if(!includeMessages && group.Kind == DebugEventKind.Message) {
 						continue;
@@ -559,7 +712,7 @@ namespace Mesen.Mcp
 							report.TraceTail.Add("$" + rows[i].ProgramCounter.ToString("X4") + ": " + rows[i].GetOutput());
 						}
 
-						report.Advice = "Inspect the crash PC, callstack and trace tail above. Use mesen_get_last_trace for more trace rows, mesen_get_state for full registers, mesen_read_memory to inspect RAM, and mesen_set_event_policy to tune which events break execution.";
+						report.Advice = "Inspect the crash PC, callstack and trace tail above (the trace tail is only populated when tracing was enabled beforehand via mesen_set_trace_options - tracing is off by default). Use mesen_get_last_trace for more trace rows, mesen_get_state for full registers, mesen_read_memory to inspect RAM, and mesen_set_event_policy to tune which events break execution.";
 					} catch(Exception ex) {
 						report.Advice = "Failed to collect crash state: " + ex.Message;
 					}

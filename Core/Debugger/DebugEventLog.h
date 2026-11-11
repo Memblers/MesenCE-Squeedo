@@ -85,6 +85,10 @@ public:
 	static constexpr int32_t BankRingSize = 512;
 	static constexpr int32_t MaxPolicyEntries = 64;
 
+	//Storm throttle: max full event captures per (source) per frame. Beyond this, only a
+	//lock-free counter is bumped - a garbage-execution storm must not do per-event capture work.
+	static constexpr int32_t MaxCapturedEventsPerSourcePerFrame = 32;
+
 	static void SetEnabled(Emulator* emu, bool enabled);
 	static bool IsEnabled();
 
@@ -97,6 +101,10 @@ public:
 	static void RecordMessageEvent(const string& title, const string& message);
 
 	static uint32_t GetEvents(DebugEventRecord* outRecords, uint32_t maxCount, uint64_t cursor, uint64_t* outNextCursor);
+
+	//Cumulative per-source counts of events that were throttled (not recorded) since the last Reset.
+	//outCounts is indexed by BreakSource value; maxCount entries are filled.
+	static void GetThrottledEventCounts(uint64_t* outCounts, uint32_t maxCount);
 
 	static void SetPolicy(BreakSource source, DebugEventPolicy policy);
 	static DebugEventPolicy GetPolicy(BreakSource source);
@@ -124,5 +132,6 @@ private:
 	static Emulator* _emu;
 
 	static uint64_t GetFrameCount();
+	static bool ThrottleAllowsCapture(int32_t sourceIdx);
 	static void PushEvent(DebugEventKind type, int32_t source, int32_t cpuType, uint32_t pc, uint32_t memAddr, int32_t memValue, const char* message);
 };
