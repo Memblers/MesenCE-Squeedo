@@ -105,7 +105,7 @@ void PceDebugger::ProcessInstruction()
 	InstructionProgress.LastMemOperation = operation;
 	InstructionProgress.StartCycle = state.CycleCount;
 
-	bool needDisassemble = _traceLogger->IsEnabled() || _settings->CheckDebuggerFlag(DebuggerFlags::PceDebuggerEnabled);
+	bool needDisassemble = _traceLogger->ShouldCapture() || _settings->CheckDebuggerFlag(DebuggerFlags::PceDebuggerEnabled);
 	if(addressInfo.Address >= 0) {
 		if(addressInfo.Type == MemoryType::PcePrgRom) {
 			_codeDataLogger->SetCode(addressInfo.Address, PceDisUtils::GetOpFlags(_prevOpCode, pc, _prevProgramCounter));
@@ -157,7 +157,7 @@ void PceDebugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType 
 	}
 
 	if(type == MemoryOperationType::ExecOpCode) {
-		if(_traceLogger->IsEnabled()) {
+		if(_traceLogger->ShouldCapture()) {
 			PceCpuState& state = _cpu->GetState();
 			DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, addr, state.PS, CpuType::Pce);
 			_traceLogger->Log(state, disInfo, operation, addressInfo);

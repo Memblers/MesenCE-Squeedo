@@ -15,11 +15,25 @@ public:
 		StopLogging();
 	}
 
-	void StartLogging(string filename)
+	//Returns false when the file could not be opened (invalid path, unwritable directory, ...)
+	//instead of silently "logging" into a dead stream.
+	bool StartLogging(string filename)
 	{
+		if(_enabled) {
+			//Already logging to another file - close it first (also flushes its buffer)
+			StopLogging();
+		}
+
 		_outputBuffer.clear();
+		_outputFile.clear();
 		_outputFile.open(filename, ios::out | ios::binary);
+		if(!_outputFile.is_open()) {
+			_enabled = false;
+			return false;
+		}
+
 		_enabled = true;
+		return true;
 	}
 
 	void StopLogging()

@@ -71,6 +71,20 @@ extern "C"
 		return _emu->GetDebugger().GetDebugger() != nullptr;
 	}
 
+	//Diagnostics: true when debugger API requests are being suppressed (ROM load/unload in
+	//progress, or a leaked block count from an interrupted load). While blocked, every
+	//WithDebugger() call silently returns empty data - this export lets the UI/MCP report
+	//that instead of showing blank windows / $0000 registers.
+	DllExport bool __stdcall IsDebuggerBlocked()
+	{
+		return _emu->IsDebuggerBlocked();
+	}
+
+	DllExport int32_t __stdcall GetDebuggerBlockCount()
+	{
+		return _emu->GetDebuggerBlockCount();
+	}
+
 	DllExport bool __stdcall IsExecutionStopped()
 	{
 		return WithDebugger(bool, IsExecutionStopped());
@@ -108,9 +122,23 @@ extern "C"
 		return WithDebugger(uint32_t, GetDisassemblySearch()->FindOccurrences(type, searchString, options, results, maxResultCount));
 	}
 
-	DllExport void __stdcall SetTraceOptions(CpuType type, TraceLoggerOptions options)
+	//Returns false when no trace logger exists for that CPU type (debugger not active/
+	//requests blocked) - callers must NOT report success in that case.
+	DllExport bool __stdcall SetTraceOptions(CpuType type, TraceLoggerOptions options)
 	{
-		WithToolVoid(GetTraceLogger(type), SetOptions(options));
+		return WrapDebuggerCall<bool>([&](Debugger* dbg) -> bool {
+			ITraceLogger* logger = dbg->GetTraceLogger(type);
+			if(logger) {
+				logger->SetOptions(options);
+				return true;
+			}
+			return false;
+		});
+	}
+
+	DllExport bool __stdcall IsTraceEnabled(CpuType type)
+	{
+		return WithTool(bool, GetTraceLogger(type), IsEnabled());
 	}
 
 	DllExport uint32_t __stdcall GetExecutionTrace(TraceRow output[], uint32_t startOffset, uint32_t lineCount)
@@ -118,14 +146,21 @@ extern "C"
 		return WithDebugger(uint32_t, GetExecutionTrace(output, startOffset, lineCount));
 	}
 
+	//Always-on crash tail (no tracing enable step required)
+	DllExport uint32_t __stdcall GetExecutionTraceTail(TraceRow output[], uint32_t startOffset, uint32_t lineCount)
+	{
+		return WithDebugger(uint32_t, GetExecutionTraceTail(output, startOffset, lineCount));
+	}
+
 	DllExport void __stdcall ClearExecutionTrace()
 	{
 		WithDebugger(void, ClearExecutionTrace());
 	}
 
-	DllExport void __stdcall StartLogTraceToFile(const char* filename)
+	//Returns false when no debugger is active or the file could not be opened
+	DllExport bool __stdcall StartLogTraceToFile(const char* filename)
 	{
-		WithDebugger(void, GetTraceLogFileSaver()->StartLogging(filename));
+		return WithDebugger(bool, GetTraceLogFileSaver()->StartLogging(filename));
 	}
 
 	DllExport void __stdcall StopLogTraceToFile()

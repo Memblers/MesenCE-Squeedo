@@ -182,6 +182,7 @@ public:
 
 	void ClearExecutionTrace();
 	uint32_t GetExecutionTrace(TraceRow output[], uint32_t startOffset, uint32_t maxLineCount);
+	uint32_t GetExecutionTraceTail(TraceRow output[], uint32_t startOffset, uint32_t maxLineCount);
 
 	CpuType GetMainCpuType() { return _mainCpuType; }
 	IDebugger* GetCpuDebugger(CpuType cpuType);

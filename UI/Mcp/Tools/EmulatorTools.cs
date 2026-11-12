@@ -43,7 +43,7 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_playback", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Control emulation playback. Use action 'pause' to pause or 'resume' to resume emulation.")]
+		 Description("Control emulation playback. Use action 'pause' to pause or 'resume' to resume emulation. Returns immediately - to run until the emulator stops, use mesen_run instead.")]
 		public static string Playback(
 			[Description("Action to perform: 'pause' or 'resume'")] string action)
 		{
@@ -61,8 +61,53 @@ namespace Mesen.Mcp.Tools
 			}
 		}
 
+		[McpServerTool(Name = "mesen_run", ReadOnly = false, Destructive = false, OpenWorld = false),
+		 Description("Resume emulation and BLOCK until it stops again (breakpoint, crash, user pause) or the timeout expires, then report why it stopped. Use this instead of mesen_playback resume + polling: no racing async messages needed. Returns the break reason, crash state and hang state when available.")]
+		public static string Run(
+			[Description("Maximum time to wait in ms (default 10000, min 100, max 120000)")] int timeoutMs = 10000)
+		{
+			McpToolHelper.EnsureDebuggerReady();
+			if(!EmuApi.IsRunning()) {
+				throw new McpException("No ROM loaded.");
+			}
+
+			timeoutMs = Math.Clamp(timeoutMs, 100, 120000);
+
+			//Resume clears both a user pause and a debugger break (routes to Debugger::Run
+			//while a debugger is active), so a parked crash/breakpoint state starts running.
+			EmuApi.Resume();
+
+			int elapsed = 0;
+			bool stopped = false;
+			while(elapsed < timeoutMs) {
+				System.Threading.Thread.Sleep(25);
+				elapsed += 25;
+				if(!EmuApi.IsRunning() || EmuApi.IsPaused()) {
+					stopped = true;
+					break;
+				}
+			}
+
+			//One drain at the end picks up break reason / crash / hang state
+			string summary = DebugEventAggregator.GetStatusSummary();
+
+			if(!EmuApi.IsRunning()) {
+				return "Emulator stopped after " + elapsed + "ms. " + summary;
+			}
+
+			if(stopped) {
+				string result = "Stopped after " + elapsed + "ms: " + summary;
+				if(summary.Contains("crashAt=")) {
+					result += " | CRASH - call mesen_get_crash_report for registers, callstack and the instruction tail.";
+				}
+				return result;
+			}
+
+			return "Still running after " + elapsed + "ms (no breakpoint/crash/pause hit). " + summary;
+		}
+
 		[McpServerTool(Name = "mesen_get_status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Get the current emulator status: running, paused, timing info.")]
+		 Description("Get the current emulator status: running, paused, timing info, break/crash/hang state and whether core debugger requests are blocked.")]
 		public static string GetStatus()
 		{
 			if(!EmuApi.IsRunning()) {
@@ -73,7 +118,18 @@ namespace Mesen.Mcp.Tools
 			CpuType mainCpu = info.ConsoleType.GetMainCpuType();
 			TimingInfo timing = EmuApi.GetTimingInfo(mainCpu);
 
-			return "Running " + info.ConsoleType + " " + info.GetRomName() + " " + Math.Round(timing.Fps, 2) + "fps frame=" + timing.FrameCount + " | " + DebugEventAggregator.GetStatusSummary();
+			string debuggerState = "";
+			try {
+				if(DebugApi.IsDebuggerBlocked()) {
+					debuggerState = " | debuggerBlocked=" + DebugApi.GetDebuggerBlockCount() + " (debug APIs return empty data until recovered - hard reset or restart Mesen)";
+				} else if(!DebugApi.IsDebuggerRunning()) {
+					debuggerState = " | debugger=inactive";
+				} else {
+					debuggerState = " | debugger=active";
+				}
+			} catch { }
+
+			return "Running " + info.ConsoleType + " " + info.GetRomName() + " " + Math.Round(timing.Fps, 2) + "fps frame=" + timing.FrameCount + " | " + DebugEventAggregator.GetStatusSummary() + debuggerState;
 		}
 
 		[McpServerTool(Name = "mesen_take_screenshot", ReadOnly = true, Destructive = false, OpenWorld = false),

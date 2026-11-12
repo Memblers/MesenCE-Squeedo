@@ -48,10 +48,17 @@ namespace Mesen.Interop
 
 		public void ProcessNotification(int type, IntPtr parameter)
 		{
-			OnNotification?.Invoke(new NotificationEventArgs() {
-				NotificationType = (ConsoleNotificationType)type,
-				Parameter = parameter
-			});
+			//Never let a managed exception escape into the native caller: an exception unwinding
+			//through native frames (SendNotification -> Stop()/LoadRom()) can skip cleanup code
+			//there and permanently break the debugger (blank windows until restart).
+			try {
+				OnNotification?.Invoke(new NotificationEventArgs() {
+					NotificationType = (ConsoleNotificationType)type,
+					Parameter = parameter
+				});
+			} catch {
+				//A subscriber threw - ignore so the emulation thread is never corrupted
+			}
 		}
 	}
 

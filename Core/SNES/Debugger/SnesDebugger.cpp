@@ -156,7 +156,7 @@ void SnesDebugger::ProcessInstruction()
 		if(addressInfo.Type == MemoryType::SnesPrgRom) {
 			_cdl->SetCode(addressInfo.Address, SnesDisUtils::GetOpFlags(_prevOpCode, pc, _prevProgramCounter) | cpuFlags);
 		}
-		if(_traceLogger->IsEnabled() || _debuggerEnabled) {
+		if(_traceLogger->ShouldCapture() || _debuggerEnabled) {
 			_disassembler->BuildCache(addressInfo, cpuFlags, _cpuType);
 		}
 	}
@@ -231,7 +231,7 @@ void SnesDebugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType
 	}
 
 	if(type == MemoryOperationType::ExecOpCode) {
-		if(_traceLogger->IsEnabled()) {
+		if(_traceLogger->ShouldCapture()) {
 			DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, addr, state.PS, _cpuType);
 			_traceLogger->Log(state, disInfo, operation, addressInfo);
 		}

@@ -158,7 +158,7 @@ void GbDebugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType t
 	InstructionProgress.LastMemOperation = operation;
 
 	if(type == MemoryOperationType::ExecOpCode) {
-		if(_traceLogger->IsEnabled()) {
+		if(_traceLogger->ShouldCapture()) {
 			DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, addr, 0, CpuType::Gameboy);
 			_traceLogger->Log(_cpu->GetState(), disInfo, operation, addressInfo);
 		}

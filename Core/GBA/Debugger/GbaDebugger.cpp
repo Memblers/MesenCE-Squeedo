@@ -145,7 +145,7 @@ void GbaDebugger::ProcessInstruction()
 
 	_debugger->ProcessBreakConditions<accessWidth>(CpuType::Gba, *_step.get(), _breakpointManager.get(), operation, addressInfo);
 
-	if(_traceLogger->IsEnabled()) {
+	if(_traceLogger->ShouldCapture()) {
 		DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, pc, _prevFlags, CpuType::Gba);
 		_traceLogger->Log(state, disInfo, operation, addressInfo);
 	}

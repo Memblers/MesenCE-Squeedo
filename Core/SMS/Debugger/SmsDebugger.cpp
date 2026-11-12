@@ -139,7 +139,7 @@ void SmsDebugger::ProcessRead(uint32_t addr, uint8_t value, MemoryOperationType 
 	InstructionProgress.LastMemOperation = operation;
 
 	if(type == MemoryOperationType::ExecOpCode) {
-		if(_traceLogger->IsEnabled()) {
+		if(_traceLogger->ShouldCapture()) {
 			DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, addr, 0, CpuType::Sms);
 			_traceLogger->Log(_cpu->GetState(), disInfo, operation, addressInfo);
 		}

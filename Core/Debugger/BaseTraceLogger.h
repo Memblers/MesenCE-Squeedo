@@ -167,6 +167,15 @@ protected:
 	uint64_t* _rowIds = nullptr;
 	TraceLogPpuState* _ppuState = nullptr;
 
+	//Always-on tail ring (last ITraceLogger::TailLogSize instructions), recorded even when
+	//tracing is disabled. Written from Log() on the emulation thread, read by
+	//Debugger::GetExecutionTraceTail for crash reports / mesen_get_last_trace.
+	CpuStateType* _tailState = nullptr;
+	DisassemblyInfo* _tailDisassembly = nullptr;
+	TraceLogPpuState* _tailPpuState = nullptr;
+	uint64_t* _tailRowIds = nullptr;
+	uint32_t _tailPos = 0;
+
 	unique_ptr<ExpressionEvaluator> _expEvaluator;
 	ExpressionData _conditionData;
 
@@ -290,10 +299,10 @@ protected:
 
 	void AddRow(CpuStateType& cpuState, DisassemblyInfo& disassemblyInfo)
 	{
+		EnsureFormatParsed();
 		_disassemblyCache[_currentPos] = disassemblyInfo;
 		_cpuState[_currentPos] = cpuState;
 		((TraceLoggerType*)this)->LogPpuState();
-
 		_rowIds[_currentPos] = ITraceLogger::NextRowId;
 		ITraceLogger::NextRowId++;
 
@@ -315,6 +324,24 @@ protected:
 		}
 
 		_currentPos = (_currentPos + 1) % ExecutionLogSize;
+	}
+
+	void AddTailRow(CpuStateType& cpuState, DisassemblyInfo& disassemblyInfo)
+	{
+		EnsureFormatParsed();
+		_tailState[_tailPos] = cpuState;
+		_tailDisassembly[_tailPos] = disassemblyInfo;
+
+		//LogPpuState() writes _ppuState[_currentPos] - that slot is always the *next* free
+		//slot of the main ring (rows end at _currentPos-1), so copying from it is safe and
+		//AddRow re-snapshots it before the main ring uses it.
+		((TraceLoggerType*)this)->LogPpuState();
+		_tailPpuState[_tailPos] = _ppuState[_currentPos];
+
+		_tailRowIds[_tailPos] = ITraceLogger::NextTailId;
+		ITraceLogger::NextTailId++;
+
+		_tailPos = (_tailPos + 1) % ITraceLogger::TailLogSize;
 	}
 
 	void ParseFormatString(string format)
@@ -429,10 +456,55 @@ public:
 		_cpuState = new CpuStateType[BaseTraceLogger::ExecutionLogSize];
 		memset(_cpuState, 0, sizeof(CpuStateType) * BaseTraceLogger::ExecutionLogSize);
 
+		_tailState = new CpuStateType[ITraceLogger::TailLogSize];
+		memset(_tailState, 0, sizeof(CpuStateType) * ITraceLogger::TailLogSize);
+
+		_tailDisassembly = new DisassemblyInfo[ITraceLogger::TailLogSize];
+		memset(_tailDisassembly, 0, sizeof(DisassemblyInfo) * ITraceLogger::TailLogSize);
+
+		_tailPpuState = new TraceLogPpuState[ITraceLogger::TailLogSize];
+		memset(_tailPpuState, 0, sizeof(TraceLogPpuState) * ITraceLogger::TailLogSize);
+
+		_tailRowIds = new uint64_t[ITraceLogger::TailLogSize];
+		memset(_tailRowIds, 0, sizeof(uint64_t) * ITraceLogger::TailLogSize);
+
 		_cpuType = cpuType;
 		_cpuMemoryType = DebugUtilities::GetCpuMemoryType(cpuType);
 
 		_expEvaluator.reset(new ExpressionEvaluator(debugger, cpuDebugger, cpuType));
+	}
+
+	//Called before any row render/record. When nobody ever called SetOptions (tracing was
+	//never enabled - the always-on tail case), _rowParts is empty and rows would render as
+	//"PC: " with no disassembly/registers. Parse a default format lazily instead of in the
+	//constructor: ParseFormatString -> GetFormatTagType is a virtual call on the CRTP
+	//derived class, which is not safe to make while the base is still constructing.
+	void EnsureFormatParsed()
+	{
+		if(_rowParts.empty()) {
+			ParseFormatString(GetDefaultFormat());
+		}
+	}
+
+	string GetDefaultFormat()
+	{
+		//Mirrors McpToolHelper.GetDefaultTraceFormat / the UI's auto formats.
+		//Only tags each logger's GetFormatTagType can resolve (plus shared tags).
+		switch(_cpuType) {
+			case CpuType::Snes:
+			case CpuType::Sa1:
+				return "[Disassembly][Align,24] A:[A,4h] X:[X,4h] Y:[Y,4h] S:[SP,4h] D:[D,4h] DB:[DB,2h] P:[P,8]";
+			case CpuType::Nes:
+				return "[Disassembly][Align,24] A:[A,2h] X:[X,2h] Y:[Y,2h] S:[SP,2h] P:[P,8]";
+			case CpuType::Gameboy:
+				return "[Disassembly][Align,24] A:[A,2h] B:[B,2h] C:[C,2h] D:[D,2h] E:[E,2h] F:[F,2h] H:[H,2h] L:[L,2h] SP:[SP,4h]";
+			case CpuType::Gba:
+				return "[Disassembly][Align,42] ";
+			case CpuType::Pic18:
+				return "[Disassembly][Align,24] W:[W,2h] BSR:[BSR,2h] STKPTR:[STKPTR,2h] STATUS:[PS,5]";
+			default:
+				return "[Disassembly][Align,24] ";
+		}
 	}
 
 	virtual ~BaseTraceLogger()
@@ -441,12 +513,20 @@ public:
 		delete[] _rowIds;
 		delete[] _ppuState;
 		delete[] _cpuState;
+		delete[] _tailState;
+		delete[] _tailDisassembly;
+		delete[] _tailPpuState;
+		delete[] _tailRowIds;
 	}
 
 	void Clear() override
 	{
 		_currentPos = 0;
 		memset(_rowIds, 0, sizeof(uint64_t) * BaseTraceLogger::ExecutionLogSize);
+
+		_tailPos = 0;
+		memset(_tailRowIds, 0, sizeof(uint64_t) * ITraceLogger::TailLogSize);
+		memset(_tailDisassembly, 0, sizeof(DisassemblyInfo) * ITraceLogger::TailLogSize);
 	}
 
 	void LogNonExec(MemoryOperationInfo& operation, AddressInfo& addressInfo)
@@ -466,6 +546,13 @@ public:
 
 	void Log(CpuStateType& cpuState, DisassemblyInfo& disassemblyInfo, MemoryOperationInfo& operation, AddressInfo& addressInfo)
 	{
+		//Always-on tail: records unconditionally (no condition filter, no format parsing) -
+		//just state + disassembly so crash reports can show the last instructions with
+		//zero setup. Cost per instruction is a few memcpys.
+		if(ITraceLogger::TailCaptureEnabled) {
+			AddTailRow(cpuState, disassemblyInfo);
+		}
+
 		if(_enabled) {
 			//For the sake of performance, only log data for the CPUs we're actively displaying/logging
 			if(ConditionMatches(disassemblyInfo, operation, addressInfo)) {
@@ -512,6 +599,16 @@ public:
 		return _rowIds[i];
 	}
 
+	int64_t GetTailRowId(uint32_t offset) override
+	{
+		int32_t pos = ((int32_t)_tailPos - (int32_t)offset);
+		int32_t i = (pos > 0 ? pos : ITraceLogger::TailLogSize + pos) - 1;
+		if(!_tailDisassembly[i].IsInitialized()) {
+			return -1;
+		}
+		return _tailRowIds[i];
+	}
+
 	bool ConditionMatches(DisassemblyInfo& disassemblyInfo, MemoryOperationInfo& operationInfo, AddressInfo& addressInfo)
 	{
 		if(!_conditionData.RpnQueue.empty()) {
@@ -525,6 +622,7 @@ public:
 
 	void GetExecutionTrace(TraceRow& row, uint32_t offset) override
 	{
+		EnsureFormatParsed();
 		int pos = ((int)_currentPos - offset);
 		int index = (pos > 0 ? pos : BaseTraceLogger::ExecutionLogSize + pos) - 1;
 
@@ -536,6 +634,26 @@ public:
 		row.Type = _cpuType;
 		_disassemblyCache[index].GetByteCode(row.ByteCode);
 		row.ByteCodeSize = _disassemblyCache[index].GetOpSize();
+		row.ProgramCounter = ((TraceLoggerType*)this)->GetProgramCounter(state);
+		row.LogSize = std::min<uint32_t>(499, (uint32_t)logOutput.size());
+		memcpy(row.LogOutput, logOutput.c_str(), row.LogSize);
+		row.LogOutput[row.LogSize] = 0;
+	}
+
+	void GetTailExecutionTrace(TraceRow& row, uint32_t offset) override
+	{
+		EnsureFormatParsed();
+		int pos = ((int)_tailPos - offset);
+		int index = (pos > 0 ? pos : ITraceLogger::TailLogSize + pos) - 1;
+
+		CpuStateType& state = _tailState[index];
+		string logOutput;
+		logOutput.reserve(300);
+		((TraceLoggerType*)this)->GetTraceRow(logOutput, state, _tailPpuState[index], _tailDisassembly[index]);
+
+		row.Type = _cpuType;
+		_tailDisassembly[index].GetByteCode(row.ByteCode);
+		row.ByteCodeSize = _tailDisassembly[index].GetOpSize();
 		row.ProgramCounter = ((TraceLoggerType*)this)->GetProgramCounter(state);
 		row.LogSize = std::min<uint32_t>(499, (uint32_t)logOutput.size());
 		memcpy(row.LogOutput, logOutput.c_str(), row.LogSize);

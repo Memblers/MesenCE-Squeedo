@@ -13,10 +13,10 @@ namespace Mesen.Mcp.Tools
 	public class MemoryTools
 	{
 		[McpServerTool(Name = "mesen_read_memory", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Read memory from the emulator. Returns a compact hex string. Use mesen_list_memory_types to see valid memory types for the current ROM.")]
+		 Description("Read memory from the emulator. Returns a compact hex string. Valid memory types are listed in the error of this tool if an invalid one is passed, or via mesen_list_memory_types.")]
 		public static string ReadMemory(
 			[Description("Start address (decimal or 0x/$ hex)")] string address,
-			[Description("Memory type (call mesen_list_memory_types first to get valid values for the current ROM)")] string memoryType,
+			[Description("Memory type (NesMemory, WorkRam, ... - see mesen_list_memory_types or this tool's error output for the valid list for the current ROM)")] string memoryType,
 			[Description("Number of bytes to read (max 4096, default 1)")] int length = 1,
 			[Description("Optional file path to save the raw binary dump")] string? outputFile = null)
 		{
@@ -26,8 +26,9 @@ namespace Mesen.Mcp.Tools
 
 			length = Math.Clamp(length, 1, 4096);
 			Int32 memSize = DebugApi.GetMemorySize(memType);
+			McpToolHelper.ValidateMemorySize(memType, memSize);
 			if(addr >= memSize) {
-				throw new McpException($"Address ${addr:X4} out of range. Memory size: ${memSize:X4}");
+				throw new McpException($"Address ${addr:X4} out of range for {memType} (size ${memSize:X4}).");
 			}
 			length = (int)Math.Min(length, memSize - addr);
 
@@ -100,6 +101,7 @@ namespace Mesen.Mcp.Tools
 			}
 
 			Int32 memSize = DebugApi.GetMemorySize(memType);
+			McpToolHelper.ValidateMemorySize(memType, memSize);
 			uint start = 0;
 			uint end = (uint)(memSize - 1);
 
@@ -200,8 +202,9 @@ namespace Mesen.Mcp.Tools
 
 					length = Math.Min(length, 256);
 					Int32 memSize = DebugApi.GetMemorySize(memType);
+					McpToolHelper.ValidateMemorySize(memType, memSize);
 					if(addr >= memSize) {
-						throw new McpException($"Address ${addr:X4} out of range. Memory size: ${memSize:X4}");
+						throw new McpException($"Address ${addr:X4} out of range for {memType} (size ${memSize:X4}).");
 					}
 					length = (int)Math.Min(length, memSize - addr);
 

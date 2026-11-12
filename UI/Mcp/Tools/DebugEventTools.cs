@@ -71,14 +71,14 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_get_crash_report", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Get a crash report: crash location (PC, frame), CPU registers, callstack, the last executed instructions (trace tail) and recent break events. Fatal events (CPU crashes, invalid opcodes) are always recorded even when their policy is 'ignore'.")]
+		 Description("Get a crash report: crash location (PC, frame), CPU registers (captured at the crash instant), callstack, the last executed instructions (trace tail, always populated from the always-on ring - no tracing setup needed) and recent break events. Fatal events (CPU crashes, invalid opcodes) are always recorded even when their policy is 'ignore'.")]
 		public static string GetCrashReport()
 		{
 			return DebugEventAggregator.GetCrashReport();
 		}
 
 		[McpServerTool(Name = "mesen_get_last_trace", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
-		 Description("Get the last N executed instructions from the in-memory trace ring buffer (chronological order, oldest first, capped at 30000 rows). Unlike mesen_get_execution_trace this is always a tail view - useful to see what ran right before a crash or glitch. Tracing is off by default: enable it first with mesen_set_trace_options.")]
+		 Description("Get the last N executed instructions from the always-on tail ring (chronological order, oldest first, up to 1024 rows per CPU). The tail records unconditionally whenever the MCP server is active - no mesen_set_trace_options setup needed, and it keeps working across crashes. For the full 30000-row conditional buffer use mesen_get_execution_trace.")]
 		public static string GetLastTrace(
 			[Description("Number of instructions to return (default 50, max 1000)")] int count = 50,
 			[Description("Optional CPU type filter (Nes, Snes, Gameboy, Gba, Pce, Sms, Ws)")] string? cpuType = null)
@@ -91,7 +91,7 @@ namespace Mesen.Mcp.Tools
 			}
 
 			count = Math.Clamp(count, 1, 1000);
-			TraceRow[] rows = DebugApi.GetExecutionTrace(0, (uint)count);
+			TraceRow[] rows = DebugApi.GetExecutionTraceTail(0, (uint)count);
 
 			//Rows come back newest-first; output chronological (oldest first)
 			StringBuilder sb = new();
@@ -101,7 +101,7 @@ namespace Mesen.Mcp.Tools
 				}
 				sb.Append('$').Append(rows[i].ProgramCounter.ToString("X4")).Append(": ").AppendLine(rows[i].GetOutput());
 			}
-			return sb.Length > 0 ? sb.ToString() : "(trace buffer empty - tracing is off by default, enable it with mesen_set_trace_options)";
+			return sb.Length > 0 ? sb.ToString() : "(tail empty - no instructions recorded since the ROM loaded or since the core debugger restarted; run the game for a moment and retry)";
 		}
 
 		[McpServerTool(Name = "mesen_get_lua_status", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),

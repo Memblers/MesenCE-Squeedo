@@ -2,6 +2,7 @@
 #include <atomic>
 #include "Debugger/DebugEventLog.h"
 #include "Debugger/DebugUtilities.h"
+#include "Debugger/ITraceLogger.h"
 #include "Shared/Emulator.h"
 #include "Shared/MessageManager.h"
 #include "Utilities/SimpleLock.h"
@@ -50,6 +51,12 @@ void DebugEventLog::SetEnabled(Emulator* emu, bool enabled)
 	auto lock = s_lock.AcquireSafe();
 	_emu = emu;
 	_enabled = enabled;
+
+	//While the MCP event log is active, every trace logger keeps its always-on crash tail
+	//(last 1024 instructions per CPU) so crash reports are self-diagnosing with zero setup.
+	//Regular UI-only sessions keep this off (zero overhead).
+	ITraceLogger::TailCaptureEnabled = enabled;
+
 	if(!enabled) {
 		s_crashed = false;
 	}

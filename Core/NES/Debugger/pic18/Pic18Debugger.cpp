@@ -117,7 +117,7 @@ void Pic18Debugger::ProcessInstruction()
 
 	_disassembler->BuildCache(addrInfo, 0, CpuType::Pic18);
 
-	if(_traceLogger->IsEnabled()) {
+	if(_traceLogger->ShouldCapture()) {
 		Pic18TraceState traceState = {};
 		traceState.PC = pc;
 		traceState.W = state.W;

@@ -59,6 +59,8 @@
 #include "Utilities/PlatformUtilities.h"
 
 uint64_t ITraceLogger::NextRowId = 0;
+uint64_t ITraceLogger::NextTailId = 0;
+bool ITraceLogger::TailCaptureEnabled = false;
 
 Debugger::Debugger(Emulator* emu, IConsole* console)
 {
@@ -1216,6 +1218,52 @@ uint32_t Debugger::GetExecutionTrace(TraceRow output[], uint32_t startOffset, ui
 						}
 						count++;
 					}
+				}
+				offset++;
+				added = true;
+				break;
+			}
+		}
+		if(!added) {
+			break;
+		}
+	}
+
+	return count;
+}
+
+uint32_t Debugger::GetExecutionTraceTail(TraceRow output[], uint32_t startOffset, uint32_t maxLineCount)
+{
+	DebugBreakHelper helper(this);
+
+	uint32_t offsetsByCpu[(int)DebugUtilities::GetLastCpuType() + 1] = {};
+
+	//Merge the per-CPU always-on tail rings (last 1024 instructions per CPU) by row id,
+	//newest first. Unlike GetExecutionTrace this never requires tracing to be enabled:
+	//the tail records unconditionally while the MCP server is active.
+	uint32_t count = 0;
+	int64_t lastRowId = ITraceLogger::NextTailId;
+	while(count < maxLineCount) {
+		bool added = false;
+		for(CpuType cpuType : _cpuTypes) {
+			ITraceLogger* logger = GetTraceLogger(cpuType);
+			if(logger) {
+				uint32_t& offset = offsetsByCpu[(int)cpuType];
+				int64_t rowId = logger->GetTailRowId(offset);
+				if(rowId == -1 || rowId != lastRowId - 1) {
+					continue;
+				}
+
+				lastRowId = rowId;
+
+				if(startOffset > 0) {
+					//Skip rows until the part the caller wants is reached
+					startOffset--;
+				} else {
+					if(output) {
+						logger->GetTailExecutionTrace(output[count], offset);
+					}
+					count++;
 				}
 				offset++;
 				added = true;

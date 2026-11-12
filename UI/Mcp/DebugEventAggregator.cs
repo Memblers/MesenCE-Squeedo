@@ -101,6 +101,11 @@ namespace Mesen.Mcp
 		private static bool _crashed;
 		private static CrashInfoDto? _crashInfo;
 
+		//Registers captured synchronously on the emulation thread at the crash instant
+		//(see OnNotification). Live reads can return PC=$0000/SP=$00 afterwards if the
+		//core debugger becomes unreachable, so keep what we saw when it still worked.
+		private static volatile string? _crashRegisters;
+
 		//hang watchdog
 		private static uint _lastFrame;
 		private static long _lastFrameTick;
@@ -180,8 +185,7 @@ namespace Mesen.Mcp
 				_pendingAlerts.Clear();
 				_expectedSites.Clear();
 				_crashed = false;
-				_crashInfo = null;
-				_hangSinceTick = null;
+				_crashInfo = null;			_crashRegisters = null;				_hangSinceTick = null;
 				_breakActive = false;
 				_breakReason = null;
 				_lastFrameTick = 0;
@@ -207,6 +211,17 @@ namespace Mesen.Mcp
 					BreakEvent evt = Marshal.PtrToStructure<BreakEvent>(e.Parameter);
 					n.Source = evt.Source;
 					n.Cpu = evt.SourceCpu;
+
+					if(Array.IndexOf(FatalTier, evt.Source) >= 0) {
+						//Crash instant - grab the registers right here on the emulation thread,
+						//while the CPU state is guaranteed valid. Once the session is wedged,
+						//live reads can come back as zeros; this snapshot still has the real
+						//values. Fatal sources only, so break storms never pay for this.
+						string regs = FormatRegisters(evt.SourceCpu);
+						if(!string.IsNullOrEmpty(regs)) {
+							_crashRegisters = regs;
+						}
+					}
 				} catch { }
 			}
 
@@ -255,6 +270,7 @@ namespace Mesen.Mcp
 					case ConsoleNotificationType.GameReset:
 						_crashed = false;
 						_crashInfo = null;
+						_crashRegisters = null;
 						_hangSinceTick = null;
 						break;
 				}
@@ -697,22 +713,37 @@ namespace Mesen.Mcp
 
 				if(_crashed && _crashInfo != null) {
 					try {
-						CpuType cpu = EmuApi.GetRomInfo().ConsoleType.GetMainCpuType();
-						uint pc = DebugApi.GetProgramCounter(cpu, true);
-						report.CpuState = "PC=" + FormatPc(pc) + " " + FormatRegisters(cpu);
+						if(!string.IsNullOrEmpty(_crashRegisters)) {
+							//Captured on the emulation thread at the crash instant - always trustworthy
+							report.CpuState = _crashRegisters + " (captured at crash instant)";
+						} else {
+							CpuType cpu = EmuApi.GetRomInfo().ConsoleType.GetMainCpuType();
+							uint pc = DebugApi.GetProgramCounter(cpu, true);
+							report.CpuState = "PC=" + FormatPc(pc) + " " + FormatRegisters(cpu);
+						}
 
-						StackFrameInfo[] callstack = DebugApi.GetCallstack(cpu);
+						CpuType mainCpu = EmuApi.GetRomInfo().ConsoleType.GetMainCpuType();
+						StackFrameInfo[] callstack = DebugApi.GetCallstack(mainCpu);
 						foreach(StackFrameInfo frame in callstack) {
 							report.Callstack.Add("$" + frame.Source.ToString("X4") + " -> $" + frame.Target.ToString("X4") + " ret=$" + frame.Return.ToString("X4"));
 						}
 
-						//Trace tail (chronological: oldest -> newest), the instructions leading up to the crash
-						TraceRow[] rows = DebugApi.GetExecutionTrace(0, 50);
+						//Trace tail from the always-on ring (last 1024 instructions per CPU) -
+						//populated regardless of whether tracing was ever enabled
+						TraceRow[] rows = DebugApi.GetExecutionTraceTail(0, 50);
 						for(int i = rows.Length - 1; i >= 0; i--) {
 							report.TraceTail.Add("$" + rows[i].ProgramCounter.ToString("X4") + ": " + rows[i].GetOutput());
 						}
 
-						report.Advice = "Inspect the crash PC, callstack and trace tail above (the trace tail is only populated when tracing was enabled beforehand via mesen_set_trace_options - tracing is off by default). Use mesen_get_last_trace for more trace rows, mesen_get_state for full registers, mesen_read_memory to inspect RAM, and mesen_set_event_policy to tune which events break execution.";
+						report.Advice = "Inspect the crash PC, callstack and trace tail above (the tail always comes from the always-on 1024-instruction ring - no tracing setup needed). Use mesen_get_last_trace for more tail rows, mesen_get_state for live registers, mesen_read_memory to inspect RAM, and mesen_set_event_policy to tune which events break execution.";
+
+						try {
+							if(!DebugApi.IsDebuggerRunning()) {
+								report.Advice += DebugApi.IsDebuggerBlocked()
+									? " WARNING: core debugger requests are BLOCKED (count " + DebugApi.GetDebuggerBlockCount() + ") - live memory/register reads return empty data until recovered (mesen_reset type 'hard', or restart Mesen). The register line above was captured before this happened."
+									: " WARNING: the core debugger is not active - live memory/register reads will return empty data until it is re-initialized.";
+							}
+						} catch { }
 					} catch(Exception ex) {
 						report.Advice = "Failed to collect crash state: " + ex.Message;
 					}
@@ -746,6 +777,13 @@ namespace Mesen.Mcp
 			} catch {
 				return "";
 			}
+		}
+
+		//Registers captured at the last fatal break (crash), or null when none was captured
+		//since the ROM loaded. Used by mesen_get_state as a fallback when live reads return zeros.
+		public static string? GetCrashRegisters()
+		{
+			return _crashRegisters;
 		}
 
 		public static string GetStatusSummary()

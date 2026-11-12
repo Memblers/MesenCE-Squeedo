@@ -309,7 +309,7 @@ void Emulator::ProcessEndOfFrame()
 
 void Emulator::Stop(bool sendNotification, bool preventRecentGameSave, bool saveBattery)
 {
-	BlockDebuggerRequests();
+	DebuggerBlockGuard dbgBlockGuard(this);
 
 	_stopFlag = true;
 
@@ -350,7 +350,7 @@ void Emulator::Stop(bool sendNotification, bool preventRecentGameSave, bool save
 		_notificationManager->SendNotification(ConsoleNotificationType::EmulationStopped);
 	}
 
-	_blockDebuggerRequestCount--;
+	dbgBlockGuard.Release();
 }
 
 void Emulator::Reset()
@@ -428,7 +428,7 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 		_threadPaused = true;
 	}
 
-	BlockDebuggerRequests();
+	DebuggerBlockGuard dbgBlockGuard(this);
 
 	auto emuLock = AcquireLock();
 	auto dbgLock = _debuggerLock.AcquireSafe();
@@ -484,7 +484,7 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 			_internalDebugger = _debugger.get();
 			debugger->ResetSuspendCounter();
 		}
-		_blockDebuggerRequestCount--;
+		dbgBlockGuard.Release();
 		return false;
 	}
 
@@ -549,7 +549,7 @@ bool Emulator::InternalLoadRom(VirtualFile romFile, VirtualFile patchFile, bool 
 
 	//Mark the thread as paused, and release the debugger lock to avoid
 	//deadlocks with DebugBreakHelper if GameLoaded event starts the debugger
-	_blockDebuggerRequestCount--;
+	dbgBlockGuard.Release();
 	dbgLock.Release();
 
 	_threadPaused = true;
@@ -1136,9 +1136,9 @@ void Emulator::InitDebugger()
 		//Lock to make sure we don't try to start debuggers in 2 separate threads at once
 		auto lock = _debuggerLock.AcquireSafe();
 		if(!_debugger) {
-			BlockDebuggerRequests();
+			DebuggerBlockGuard dbgBlockGuard(this);
 			ResetDebugger(true);
-			_blockDebuggerRequestCount--;
+			dbgBlockGuard.Release();
 
 			//_paused should be false while debugger is enabled
 			_paused = false;
@@ -1154,9 +1154,9 @@ void Emulator::StopDebugger()
 	if(_debugger) {
 		auto lock = _debuggerLock.AcquireSafe();
 		if(_debugger) {
-			BlockDebuggerRequests();
+			DebuggerBlockGuard dbgBlockGuard(this);
 			ResetDebugger();
-			_blockDebuggerRequestCount--;
+			dbgBlockGuard.Release();
 		}
 	}
 }

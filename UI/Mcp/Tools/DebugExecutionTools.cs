@@ -293,6 +293,7 @@ namespace Mesen.Mcp.Tools
 			StringBuilder sb = new();
 			sb.Append(cpu).Append(" PC=$").Append(pc.ToString("X4"));
 
+			bool hasRegs = false;
 			try {
 				IConsoleHandler handler = ConsoleHandlerFactory.GetHandler(cpu);
 				Dictionary<string, string>? regs = handler.GetRegisters(cpu);
@@ -300,9 +301,22 @@ namespace Mesen.Mcp.Tools
 					foreach(var kv in regs) {
 						sb.Append(' ').Append(kv.Key).Append('=').Append(kv.Value);
 					}
+					hasRegs = regs.Count > 0;
 				}
 			} catch {
 				// Register state not available
+			}
+
+			if(pc == 0 && hasRegs) {
+				//PC=$0000 with registers present is the classic "live reads came back zeroed"
+				//state (core debugger unreachable after a crash/hang). Show what we captured
+				//at the crash instant instead of pretending the CPU really sits at $0000.
+				string? snapshot = DebugEventAggregator.GetCrashRegisters();
+				if(!string.IsNullOrEmpty(snapshot)) {
+					sb.Append(" | live state unavailable (PC=$0000) - registers captured at crash instant: ").Append(snapshot);
+				} else {
+					sb.Append(" | live state unavailable - core debugger may be blocked, check mesen_get_status (debuggerBlocked)");
+				}
 			}
 
 			return sb.ToString();

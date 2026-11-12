@@ -150,6 +150,33 @@ private:
 	void BlockDebuggerRequests();
 	void ResetDebugger(bool startDebugger = false);
 
+	//RAII wrapper: guarantees the block count is released even if an exception unwinds
+	//between BlockDebuggerRequests() and the manual decrement (e.g. SaveBattery/IO or a
+	//managed notification-handler exception escaping through Stop()/LoadRom()). A leaked
+	//count makes GetDebugger() return null forever -> every debug API silently returns
+	//empty data (blank trace/debug windows, PC=$0000, memory size $0000) until restart.
+	class DebuggerBlockGuard
+	{
+	private:
+		Emulator* _emu;
+		bool _released = false;
+
+	public:
+		DebuggerBlockGuard(Emulator* emu) : _emu(emu) { _emu->BlockDebuggerRequests(); }
+		~DebuggerBlockGuard() { Release(); }
+
+		void Release()
+		{
+			if(!_released) {
+				_released = true;
+				_emu->_blockDebuggerRequestCount--;
+			}
+		}
+
+		DebuggerBlockGuard(const DebuggerBlockGuard&) = delete;
+		DebuggerBlockGuard& operator=(const DebuggerBlockGuard&) = delete;
+	};
+
 	double GetFrameDelay();
 
 	void TryLoadRom(VirtualFile& romFile, LoadRomResult& result, unique_ptr<IConsole>& console, bool useFileSignature);
@@ -214,6 +241,7 @@ public:
 	bool IsThreadPaused();
 
 	bool IsDebuggerBlocked() { return _blockDebuggerRequestCount > 0; }
+	int32_t GetDebuggerBlockCount() { return _blockDebuggerRequestCount; }
 	void SuspendDebugger(bool release);
 
 	void Serialize(ostream& out, bool includeSettings, int compressionLevel = 1);

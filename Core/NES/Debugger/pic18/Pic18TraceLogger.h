@@ -30,7 +30,7 @@ protected:
 		//W/BSR/STKPTR/STATUS are the natural PIC18 names (WREG also accepted).
 		//A/B/S/SP are kept as aliases so existing custom formats keep working.
 		if(tag == "W" || tag == "WREG" || tag == "A") return RowDataType::A;
-		if(tag == "STATUS" || tag == "S") return RowDataType::PS;
+		if(tag == "PS" || tag == "STATUS" || tag == "S") return RowDataType::PS;
 		if(tag == "BSR" || tag == "B") return RowDataType::B;
 		if(tag == "STKPTR" || tag == "SP") return RowDataType::SP;
 		return RowDataType::Text;

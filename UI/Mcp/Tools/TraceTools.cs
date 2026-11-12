@@ -12,7 +12,7 @@ namespace Mesen.Mcp.Tools
 	public class TraceTools
 	{
 		[McpServerTool(Name = "mesen_set_trace_options", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Configure trace logging options for a CPU. Must be called before reading execution trace.")]
+		 Description("Configure trace logging options for a CPU. Must be called before reading execution trace with mesen_get_execution_trace (the 30000-row buffer). Verifies the flag actually reached the core and reports failure instead of pretending. Note: rows are only recorded while emulation is running - a paused/crashed emulator records nothing. For an always-on tail that needs no setup, use mesen_get_last_trace.")]
 		public static string SetTraceOptions(
 			[Description("CPU type: Nes, Snes, Gameboy, Gba, Pce, Sms, Ws, Spc, Sa1, Gsu, Cx4")] string cpuType,
 			[Description("Enable tracing for this CPU (default true)")] bool enabled = true,
@@ -37,9 +37,34 @@ namespace Mesen.Mcp.Tools
 			Array.Resize(ref options.Format, 1000);
 			Array.Resize(ref options.Condition, 1000);
 
-			DebugApi.SetTraceOptions(cpu, options);
+			bool applied;
+			try {
+				applied = DebugApi.SetTraceOptions(cpu, options);
+			} catch(Exception ex) {
+				throw new McpException("SetTraceOptions failed: " + ex.Message);
+			}
 
-			return "Trace " + (enabled ? "enabled" : "disabled") + " for " + cpuType + ".";
+			if(!applied) {
+				//Previously this silently no-oped and reported success - the flag never reached the logger
+				throw new McpException("Trace options were NOT applied: no trace logger exists for " + cpuType +
+					" (core debugger not active or its requests are blocked - check mesen_get_status for debuggerBlocked, then reload the ROM).");
+			}
+
+			bool state = DebugApi.IsTraceEnabled(cpu);
+			if(state != enabled) {
+				throw new McpException("Trace options were applied but the core reports tracing " + (state ? "enabled" : "disabled") +
+					" - the flag did not stick (another client may have re-applied its own options, e.g. a closing trace logger window).");
+			}
+
+			if(!enabled) {
+				return "Trace disabled for " + cpuType + ".";
+			}
+
+			bool running = false;
+			try { running = EmuApi.IsRunning() && !EmuApi.IsPaused(); } catch { }
+			return "Trace enabled for " + cpuType + " (verified in core, 30000-row buffer). " +
+				(running ? "Emulation is running - rows are being recorded now." : "Emulation is paused/stopped - rows will only be recorded once it runs again.") +
+				" Note: a paused/crashed emulator records nothing; use mesen_get_last_trace for the always-on tail.";
 		}
 
 		[McpServerTool(Name = "mesen_get_execution_trace", ReadOnly = true, Destructive = false, Idempotent = true, OpenWorld = false),
@@ -77,6 +102,10 @@ namespace Mesen.Mcp.Tools
 			if(!string.IsNullOrEmpty(outputFile)) {
 				File.WriteAllText(outputFile, text);
 			}
+			if(string.IsNullOrEmpty(text)) {
+				return "(trace buffer empty - the 30000-row buffer requires mesen_set_trace_options first and only fills while emulation runs. " +
+					"Use mesen_get_last_trace for the always-on tail that needs no setup.)";
+			}
 			return text;
 		}
 
@@ -91,23 +120,44 @@ namespace Mesen.Mcp.Tools
 		}
 
 		[McpServerTool(Name = "mesen_trace_file", ReadOnly = false, Destructive = false, OpenWorld = false),
-		 Description("Start or stop logging execution trace to a file. Use action 'start' to begin logging, 'stop' to end.")]
+		 Description("Start or stop logging execution trace to a file. Use action 'start' to begin logging, 'stop' to end. Requires tracing to be enabled (mesen_set_trace_options) for rows to appear. Validates the path and reports the underlying error on failure.")]
 		public static string TraceFile(
 			[Description("Action: 'start' or 'stop'")] string action,
 			[Description("File path for trace log (required for start)")] string? filepath = null)
 		{
-			McpToolHelper.EnsureDebuggerReady();
-
 			switch(action.ToLowerInvariant()) {
-				case "start":
+				case "start": {
 					if(string.IsNullOrEmpty(filepath)) {
 						throw new McpException("File path is required when action is 'start'.");
 					}
-					DebugApi.StartLogTraceToFile(filepath);
-					return "Trace logging to " + filepath;
+
+					McpToolHelper.EnsureDebuggerReady();
+
+					string? dir = Path.GetDirectoryName(Path.GetFullPath(filepath));
+					if(!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+						throw new McpException("Directory does not exist: " + dir);
+					}
+
+					try {
+						if(!DebugApi.StartLogTraceToFile(filepath)) {
+							throw new McpException("Core could not open trace file for writing: " + filepath + " (path invalid, locked, or no active debugger).");
+						}
+					} catch(McpException) {
+						throw;
+					} catch(Exception ex) {
+						throw new McpException("Failed to start trace logging to " + filepath + ": " + ex.Message);
+					}
+					CpuType mainCpu;
+					try { mainCpu = EmuApi.GetRomInfo().ConsoleType.GetMainCpuType(); } catch { mainCpu = CpuType.Nes; }
+					return "Trace logging to " + filepath + (DebugApi.IsTraceEnabled(mainCpu) ? "" : " (note: tracing is currently disabled - enable it with mesen_set_trace_options or no rows will be written)");
+				}
 
 				case "stop":
-					DebugApi.StopLogTraceToFile();
+					try {
+						DebugApi.StopLogTraceToFile();
+					} catch(Exception ex) {
+						throw new McpException("Failed to stop trace logging: " + ex.Message);
+					}
 					return "Trace logging stopped.";
 
 				default:

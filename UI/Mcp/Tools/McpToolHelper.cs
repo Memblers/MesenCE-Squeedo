@@ -55,27 +55,50 @@ namespace Mesen.Mcp.Tools
 
 		public static void EnsureDebuggerReady()
 		{
-			if(!EmuApi.IsRunning()) {
-				throw new McpException("No ROM loaded.");
-			}
+			try {
+				if(!EmuApi.IsRunning()) {
+					throw new McpException("No ROM loaded.");
+				}
 
-			bool debuggerRestarted = !DebugApi.IsDebuggerRunning();
-			if(debuggerRestarted) {
-				//The core debugger was either never started, or was released (e.g. when the
-				//last debug window was closed) and is now being recreated with empty tables.
-				//Tracing stays opt-in (mesen_set_trace_options) - auto-enabling full instruction
-				//tracing is too expensive during garbage/crash storms.
-				DebugApi.InitializeDebugger();
-				_debuggerInitialized = true;
-			}
+				bool debuggerRestarted = !DebugApi.IsDebuggerRunning();
+				if(debuggerRestarted) {
+					//The core debugger was either never started, or was released (e.g. when the
+					//last debug window was closed) and is now being recreated with empty tables.
+					//Tracing stays opt-in (mesen_set_trace_options) - auto-enabling full instruction
+					//tracing is too expensive during garbage/crash storms.
+					DebugApi.InitializeDebugger();
+					_debuggerInitialized = true;
+				}
 
-			//Make sure the debug workspace (symbol files like <rom>.mlb) is loaded for this ROM
-			DebugWorkspaceManager.EnsureLoaded();
+				if(!DebugApi.IsDebuggerRunning()) {
+					//Init was attempted but no debugger is reachable: while the core blocks
+					//debugger requests (ROM load/unload in progress, or a leaked block count
+					//after an interrupted load), every debug API silently returns empty data
+					//(memory size $0000, PC=$0000, blank windows). Report it instead.
+					if(DebugApi.IsDebuggerBlocked()) {
+						int count = DebugApi.GetDebuggerBlockCount();
+						throw new McpException(
+							"Core debugger requests are blocked (block count " + count + "). " +
+							(count > 1
+								? "The count looks leaked (no load in progress can produce this) - recovery: call mesen_reset with type 'hard'; if that fails, restart Mesen."
+								: "A ROM load/unload may be in progress - retry in a moment; if this persists, call mesen_reset with type 'hard' or restart Mesen."));
+					}
+					throw new McpException("Core debugger could not be initialized (no ROM running or the debugger failed to start).");
+				}
 
-			if(debuggerRestarted) {
-				//A fresh core debugger starts with empty label/breakpoint tables - re-push them
-				LabelManager.RefreshLabels(false);
-				BreakpointManager.SetBreakpoints();
+				//Make sure the debug workspace (symbol files like <rom>.mlb) is loaded for this ROM
+				DebugWorkspaceManager.EnsureLoaded();
+
+				if(debuggerRestarted) {
+					//A fresh core debugger starts with empty label/breakpoint tables - re-push them
+					LabelManager.RefreshLabels(false);
+					BreakpointManager.SetBreakpoints();
+				}
+			} catch(McpException) {
+				throw;
+			} catch(Exception ex) {
+				//Never surface raw exceptions (they show up as a bare "An error occurred invoking ...")
+				throw new McpException("Debugger initialization failed: " + ex.Message);
 			}
 		}
 
@@ -107,10 +130,55 @@ namespace Mesen.Mcp.Tools
 
 		public static MemoryType ParseMemoryType(string memoryType)
 		{
-			if(!Enum.TryParse<MemoryType>(memoryType, true, out MemoryType memType)) {
-				throw new McpException("Invalid memory type: " + memoryType + ". Call mesen_list_memory_types to see valid values.");
+			if(!Enum.TryParse<MemoryType>(memoryType, true, out MemoryType memType) || !Enum.IsDefined(memType)) {
+				//Self-contained error: the agent may not be able to call mesen_list_memory_types
+				//(its tool group can be disabled in the IDE), so include the actual list here.
+				throw new McpException("Invalid memory type: " + memoryType + ". Valid memory types for the current ROM: " + GetMemoryTypeList());
 			}
 			return memType;
+		}
+
+		public static string GetMemoryTypeList()
+		{
+			try {
+				if(!EmuApi.IsRunning()) {
+					return "(no ROM loaded)";
+				}
+
+				System.Text.StringBuilder sb = new();
+				foreach(MemoryType memType in Enum.GetValues<MemoryType>()) {
+					try {
+						if(DebugApi.GetMemorySize(memType) > 0) {
+							if(sb.Length > 0) {
+								sb.Append(", ");
+							}
+							sb.Append(memType);
+						}
+					} catch { }
+				}
+				return sb.Length > 0 ? sb.ToString() : "(none available)";
+			} catch {
+				return "(could not list memory types)";
+			}
+		}
+
+		public static void ValidateMemorySize(MemoryType memType, Int32 memSize)
+		{
+			if(memSize > 0) {
+				return;
+			}
+
+			//Size 0 means either the type doesn't exist on this ROM, or the core debugger is
+			//unreachable (blocked/stopped) - the latter used to surface as a bare
+			//"Memory size: $0000" for every type after a crash/hang, which looked like data.
+			if(!DebugApi.IsDebuggerRunning()) {
+				string reason = DebugApi.IsDebuggerBlocked()
+					? "debugger requests are blocked (block count " + DebugApi.GetDebuggerBlockCount() + ")"
+					: "the core debugger is not active";
+				throw new McpException($"Cannot read {memType}: the core debugger is unreachable ({reason}). " +
+					"Call mesen_reset type 'hard' to recover, or restart Mesen if it persists. Valid types meanwhile: " + GetMemoryTypeList());
+			}
+			throw new McpException($"Memory type {memType} has size 0 for this ROM. Valid types: " + GetMemoryTypeList());
 		}
 
 		public static CpuType ParseCpuType(string cpuType)

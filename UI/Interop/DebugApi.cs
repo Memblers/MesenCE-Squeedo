@@ -21,14 +21,17 @@ namespace Mesen.Interop
 		[DllImport(DllPath)] public static extern void InitializeDebugger();
 		[DllImport(DllPath)] public static extern void ReleaseDebugger();
 		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDebuggerRunning();
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsDebuggerBlocked();
+		[DllImport(DllPath)] public static extern Int32 GetDebuggerBlockCount();
 
 		[DllImport(DllPath)] public static extern void ResumeExecution();
 		[DllImport(DllPath)] public static extern void Step(CpuType cpuType, Int32 instructionCount, StepType type = StepType.Step);
 
-		[DllImport(DllPath)] public static extern void StartLogTraceToFile([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool StartLogTraceToFile([MarshalAs(UnmanagedType.LPUTF8Str)] string filename);
 		[DllImport(DllPath)] public static extern void StopLogTraceToFile();
 
-		[DllImport(DllPath)] public static extern void SetTraceOptions(CpuType cpuType, InteropTraceLoggerOptions options);
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool SetTraceOptions(CpuType cpuType, InteropTraceLoggerOptions options);
+		[DllImport(DllPath)][return: MarshalAs(UnmanagedType.I1)] public static extern bool IsTraceEnabled(CpuType cpuType);
 
 		public const int TraceLogBufferSize = 30000;
 		[DllImport(DllPath)] public static extern void ClearExecutionTrace();
@@ -50,6 +53,23 @@ namespace Mesen.Interop
 		public static UInt32 GetExecutionTraceSize()
 		{
 			return DebugApi.GetExecutionTraceWrapper(IntPtr.Zero, 0, DebugApi.TraceLogBufferSize);
+		}
+
+		//Always-on crash tail (last 1024 instructions per CPU) - readable without enabling tracing
+		public const int TraceTailBufferSize = 1024;
+		[DllImport(DllPath, EntryPoint = "GetExecutionTraceTail")] private static extern UInt32 GetExecutionTraceTailWrapper(IntPtr output, UInt32 startOffset, UInt32 maxRowCount);
+		public static unsafe TraceRow[] GetExecutionTraceTail(UInt32 startOffset, UInt32 maxRowCount)
+		{
+			TraceRow[] rows = new TraceRow[maxRowCount];
+
+			UInt32 rowCount;
+			fixed(TraceRow* ptr = rows) {
+				rowCount = DebugApi.GetExecutionTraceTailWrapper((IntPtr)ptr, startOffset, maxRowCount);
+			}
+
+			Array.Resize(ref rows, (int)rowCount);
+
+			return rows;
 		}
 
 		[DllImport(DllPath, EntryPoint = "GetDebuggerLog")] private static extern void GetDebuggerLogWrapper(IntPtr outLog, Int32 maxLength);

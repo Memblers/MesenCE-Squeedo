@@ -154,7 +154,7 @@ void WsDebugger::ProcessRead(uint32_t addr, uint16_t value, MemoryOperationType 
 	InstructionProgress.LastMemOperation = operation;
 
 	if(type == MemoryOperationType::ExecOpCode) {
-		if(_traceLogger->IsEnabled()) {
+		if(_traceLogger->ShouldCapture()) {
 			DisassemblyInfo disInfo = _disassembler->GetDisassemblyInfo(addressInfo, addr, 0, CpuType::Ws);
 			_traceLogger->Log(_cpu->GetState(), disInfo, operation, addressInfo);
 		}
